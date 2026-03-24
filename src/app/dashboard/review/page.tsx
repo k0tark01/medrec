@@ -7,15 +7,43 @@ import { Query } from "appwrite";
 import { StatusBadge } from "@/components/status-badge";
 import { formatDocType } from "@/lib/doc-requirements";
 import type { Profile, DocRecord } from "@/lib/types";
-import { ChevronRight, Eye, Check, X, Download, ArrowLeft, Send } from "lucide-react";
+import { ChevronRight, Eye, Check, X, Download, ArrowLeft, Send, Search } from "lucide-react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { useTranslation } from "@/lib/language-context";
+import { toast } from "sonner";
+import { ListSkeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Pagination, usePagination } from "@/components/pagination";
+import { FilePreviewModal } from "@/components/file-preview-modal";
+import { logAuditEvent } from "@/lib/audit";
 
 export default function ReviewPage() {
   const { profile } = useAuth();
+  const { t } = useTranslation();
   const [applicants, setApplicants] = useState<Profile[]>([]);
   const [selected, setSelected] = useState<Profile | null>(null);
   const [docs, setDocs] = useState<DocRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [rejectingDoc, setRejectingDoc] = useState<DocRecord | null>(null);
+  const [rejectNotes, setRejectNotes] = useState("");
   const [loadingDocs, setLoadingDocs] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [previewTitle, setPreviewTitle] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  function openPreview(url: string, title: string) {
+    setPreviewUrl(url);
+    setPreviewTitle(title);
+    setPreviewOpen(true);
+  }
 
   useEffect(() => {
     async function load() {
@@ -53,16 +81,26 @@ export default function ReviewPage() {
       status: "Verified",
       reviewerNotes: "",
     });
+    await logAuditEvent({ userId: profile!.$id, action: "verifyDoc", targetId: doc.$id, targetType: "document", details: formatDocType(doc.docType) });
+    toast.success(t.review.verify + " ✓");
     if (selected) await loadDocs(selected);
   }
 
   async function rejectDoc(doc: DocRecord) {
-    const notes = prompt("Reason for rejection:");
-    if (!notes) return;
-    await databases.updateDocument(DATABASE_ID, COLLECTIONS.DOCUMENTS, doc.$id, {
+    setRejectingDoc(doc);
+    setRejectNotes("");
+  }
+
+  async function confirmReject() {
+    if (!rejectingDoc || !rejectNotes.trim()) return;
+    await databases.updateDocument(DATABASE_ID, COLLECTIONS.DOCUMENTS, rejectingDoc.$id, {
       status: "Needs_Correction",
-      reviewerNotes: notes,
+      reviewerNotes: rejectNotes.trim(),
     });
+    await logAuditEvent({ userId: profile!.$id, action: "rejectDoc", targetId: rejectingDoc.$id, targetType: "document", details: `${formatDocType(rejectingDoc.docType)}: ${rejectNotes.trim()}` });
+    toast.error(t.review.reject + " — " + formatDocType(rejectingDoc.docType));
+    setRejectingDoc(null);
+    setRejectNotes("");
     if (selected) await loadDocs(selected);
   }
 
@@ -70,6 +108,7 @@ export default function ReviewPage() {
     await databases.updateDocument(DATABASE_ID, COLLECTIONS.PROFILES, applicant.$id, {
       currentStatus: "Ready_for_Partner",
     });
+    await logAuditEvent({ userId: profile!.$id, action: "readyForPartner", targetId: applicant.$id, targetType: "profile", details: applicant.fullName });
     setApplicants((prev) =>
       prev.map((a) => (a.$id === applicant.$id ? { ...a, currentStatus: "Ready_for_Partner" as const } : a))
     );
@@ -82,6 +121,7 @@ export default function ReviewPage() {
     await databases.updateDocument(DATABASE_ID, COLLECTIONS.PROFILES, applicant.$id, {
       currentStatus: "Submitted_to_Partner",
     });
+    await logAuditEvent({ userId: profile!.$id, action: "markSubmitted", targetId: applicant.$id, targetType: "profile", details: applicant.fullName });
     setApplicants((prev) =>
       prev.map((a) => (a.$id === applicant.$id ? { ...a, currentStatus: "Submitted_to_Partner" as const } : a))
     );
@@ -98,165 +138,233 @@ export default function ReviewPage() {
     return storage.getFileDownload(bucket, fileId);
   }
 
+  const filteredApplicants = applicants.filter((a) => {
+    const q = searchQuery.toLowerCase();
+    const matchesSearch = !q || a.fullName.toLowerCase().includes(q) || a.email.toLowerCase().includes(q) || a.occupation.toLowerCase().includes(q);
+    const matchesStatus = statusFilter === "all" || a.currentStatus === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const { paginate, totalItems } = usePagination(filteredApplicants);
+  const paginatedApplicants = paginate(currentPage);
+
   if (!profile || (profile.role !== "reviewer" && profile.role !== "admin")) {
-    return <p className="text-ink-muted">You don&apos;t have access to this page.</p>;
+    return <p className="text-muted-foreground">{t.review.noAccess}</p>;
   }
+
+  const rejectDialog = (
+    <Dialog open={!!rejectingDoc} onOpenChange={(open) => { if (!open) setRejectingDoc(null); }}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{t.review.rejectReason}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label>{rejectingDoc ? formatDocType(rejectingDoc.docType) : ""}</Label>
+          <Textarea
+            value={rejectNotes}
+            onChange={(e) => setRejectNotes(e.target.value)}
+            placeholder={t.review.rejectReason}
+            rows={3}
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setRejectingDoc(null)}>
+            {t.review.backToQueue}
+          </Button>
+          <Button
+            onClick={confirmReject}
+            disabled={!rejectNotes.trim()}
+            className="bg-destructive text-white hover:bg-destructive/90"
+          >
+            <X className="w-4 h-4 mr-1" /> {t.review.reject}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 
   // Detail view
   if (selected) {
     const allVerified = docs.length > 0 && docs.every((d) => d.status === "Verified");
 
     return (
-      <div>
-        <button
-          onClick={() => setSelected(null)}
-          className="flex items-center gap-1 text-sm text-ink-muted hover:text-ink-secondary mb-4"
-        >
-          <ArrowLeft className="w-4 h-4" /> Back to Queue
-        </button>
+      <>
+        {rejectDialog}
+        <FilePreviewModal open={previewOpen} onClose={() => setPreviewOpen(false)} url={previewUrl} title={previewTitle} />
+        <div>
+          <button
+            onClick={() => setSelected(null)}
+            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" /> {t.review.backToQueue}
+          </button>
 
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-2xl font-bold text-ink">{selected.fullName}</h1>
-            <p className="text-sm text-ink-muted">
-              {selected.occupation} Ã¢â‚¬Â¢ {selected.academicStatus} Ã¢â‚¬Â¢ {selected.email}
+            <h1 className="text-2xl font-bold text-foreground">{selected.fullName}</h1>
+            <p className="text-sm text-muted-foreground">
+              {selected.occupation} &bull; {selected.academicStatus} &bull; {selected.email}
             </p>
           </div>
           <div className="flex items-center gap-2">
             <StatusBadge status={selected.currentStatus} />
             {allVerified && selected.currentStatus === "Reviewing" && (
-              <button
-                onClick={() => markReadyForPartner(selected)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-accent-bold text-white text-sm rounded-lg hover:bg-accent-bolder"
-              >
-                <Check className="w-4 h-4" /> Ready for Partner
-              </button>
+              <Button onClick={() => markReadyForPartner(selected)} className="gradient-primary text-white border-0" size="sm">
+                <Check className="w-4 h-4 mr-1.5" /> {t.review.readyForPartner}
+              </Button>
             )}
             {selected.currentStatus === "Ready_for_Partner" && (
-              <button
-                onClick={() => markSubmittedToPartner(selected)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700"
-              >
-                <Send className="w-4 h-4" /> Mark Submitted
-              </button>
+              <Button onClick={() => markSubmittedToPartner(selected)} size="sm" className="bg-purple-600 hover:bg-purple-700 text-white">
+                <Send className="w-4 h-4 mr-1.5" /> {t.review.markSubmitted}
+              </Button>
             )}
           </div>
         </div>
 
         {loadingDocs ? (
-          <div className="flex justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-bold" />
-          </div>
+          <ListSkeleton count={3} />
         ) : docs.length === 0 ? (
-          <p className="text-ink-muted py-8 text-center">No documents uploaded yet.</p>
+          <p className="text-muted-foreground py-8 text-center">{t.review.noDocsYet}</p>
         ) : (
           <div className="space-y-3">
             {docs.map((doc) => (
-              <div key={doc.$id} className="bg-card rounded-xl border border-line p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="font-medium text-ink">{formatDocType(doc.docType)}</span>
-                  <StatusBadge status={doc.status} />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                  {doc.originalFileId && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-ink-muted">Original:</span>
-                      <a
-                        href={getPreviewUrl(doc.originalFileId, BUCKET_ORIGINALS).toString()}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-accent-bold text-xs hover:underline inline-flex items-center gap-1"
-                      >
-                        <Eye className="w-3 h-3" /> Preview
-                      </a>
-                      <a
-                        href={getDownloadUrl(doc.originalFileId, BUCKET_ORIGINALS).toString()}
-                        className="text-ink-muted text-xs hover:underline inline-flex items-center gap-1"
-                      >
-                        <Download className="w-3 h-3" /> Download
-                      </a>
-                    </div>
-                  )}
-                  {doc.translatedFileId && (
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-ink-muted">Translation:</span>
-                      <a
-                        href={getPreviewUrl(doc.translatedFileId, BUCKET_TRANSLATIONS).toString()}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-accent-bold text-xs hover:underline inline-flex items-center gap-1"
-                      >
-                        <Eye className="w-3 h-3" /> Preview
-                      </a>
-                      <a
-                        href={getDownloadUrl(doc.translatedFileId, BUCKET_TRANSLATIONS).toString()}
-                        className="text-ink-muted text-xs hover:underline inline-flex items-center gap-1"
-                      >
-                        <Download className="w-3 h-3" /> Download
-                      </a>
-                    </div>
-                  )}
-                </div>
-
-                {doc.status !== "Verified" && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => verifyDoc(doc)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-green-100 text-green-700 text-xs rounded-lg hover:bg-green-300"
-                    >
-                      <Check className="w-3 h-3" /> Verify
-                    </button>
-                    <button
-                      onClick={() => rejectDoc(doc)}
-                      className="inline-flex items-center gap-1 px-3 py-1.5 bg-red-100 text-red-700 text-xs rounded-lg hover:bg-red-200"
-                    >
-                      <X className="w-3 h-3" /> Reject
-                    </button>
+              <Card key={doc.$id}>
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="font-medium text-foreground">{formatDocType(doc.docType)}</span>
+                    <StatusBadge status={doc.status} />
                   </div>
-                )}
-              </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+                    {doc.originalFileId && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{t.review.originalLabel}</span>
+                        <button
+                          onClick={() => openPreview(getPreviewUrl(doc.originalFileId!, BUCKET_ORIGINALS).toString(), `${formatDocType(doc.docType)} — ${t.review.originalLabel}`)}
+                          className="text-primary text-xs hover:underline inline-flex items-center gap-1"
+                        >
+                          <Eye className="w-3 h-3" /> {t.review.preview}
+                        </button>
+                        <a
+                          href={getDownloadUrl(doc.originalFileId, BUCKET_ORIGINALS).toString()}
+                          className="text-muted-foreground text-xs hover:underline inline-flex items-center gap-1"
+                        >
+                          <Download className="w-3 h-3" /> {t.review.download}
+                        </a>
+                      </div>
+                    )}
+                    {doc.translatedFileId && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">{t.review.translationLabel}</span>
+                        <button
+                          onClick={() => openPreview(getPreviewUrl(doc.translatedFileId!, BUCKET_TRANSLATIONS).toString(), `${formatDocType(doc.docType)} — ${t.review.translationLabel}`)}
+                          className="text-primary text-xs hover:underline inline-flex items-center gap-1"
+                        >
+                          <Eye className="w-3 h-3" /> {t.review.preview}
+                        </button>
+                        <a
+                          href={getDownloadUrl(doc.translatedFileId, BUCKET_TRANSLATIONS).toString()}
+                          className="text-muted-foreground text-xs hover:underline inline-flex items-center gap-1"
+                        >
+                          <Download className="w-3 h-3" /> {t.review.download}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+
+                  {doc.status !== "Verified" && (
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => verifyDoc(doc)}
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        <Check className="w-3 h-3 mr-1" /> {t.review.verify}
+                      </Button>
+                      <Button
+                        onClick={() => rejectDoc(doc)}
+                        size="sm"
+                        variant="outline"
+                        className="border-destructive/30 text-destructive hover:bg-destructive/10"
+                      >
+                        <X className="w-3 h-3 mr-1" /> {t.review.reject}
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             ))}
           </div>
         )}
       </div>
+      </>
     );
   }
 
   // Queue list view
   return (
-    <div>
-      <h1 className="text-2xl font-bold text-ink mb-2">Review Queue</h1>
-      <p className="text-sm text-ink-muted mb-6">Click an applicant to review their documents.</p>
+    <>
+      {rejectDialog}
+      <div>
+      <h1 className="text-2xl font-bold text-foreground mb-2">{t.review.title}</h1>
+      <p className="text-sm text-muted-foreground mb-4">{t.review.desc}</p>
+
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder={t.common.search}
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+            className="pl-9"
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={(v: string | null) => { setStatusFilter(v ?? "all"); setCurrentPage(1); }}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder={t.common.filterByStatus} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">{t.common.filterByStatus}</SelectItem>
+            <SelectItem value="Draft">Draft</SelectItem>
+            <SelectItem value="Reviewing">Reviewing</SelectItem>
+            <SelectItem value="Ready_for_Partner">Ready for Partner</SelectItem>
+            <SelectItem value="Submitted_to_Partner">Submitted to Partner</SelectItem>
+            <SelectItem value="Paid">Paid</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-bold" />
-        </div>
-      ) : applicants.length === 0 ? (
-        <p className="text-ink-muted py-8 text-center">No applicants to review.</p>
+        <ListSkeleton count={5} />
+      ) : paginatedApplicants.length === 0 ? (
+        <p className="text-muted-foreground py-8 text-center">{filteredApplicants.length === 0 && applicants.length > 0 ? t.common.noResults : t.review.noApplicants}</p>
       ) : (
         <div className="space-y-2">
-          {applicants.map((a) => (
-            <button
+          {paginatedApplicants.map((a) => (
+            <Card
               key={a.$id}
+              className="cursor-pointer hover:border-primary/30 transition-colors"
               onClick={() => loadDocs(a)}
-              className="w-full bg-card rounded-xl border border-line p-4 flex items-center justify-between hover:border-accent-200 transition text-left"
             >
-              <div>
-                <div className="font-medium text-ink">{a.fullName}</div>
-                <div className="text-xs text-ink-muted">
-                  {a.occupation} Ã¢â‚¬Â¢ {a.academicStatus} Ã¢â‚¬Â¢ {a.email}
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <div className="font-medium text-foreground">{a.fullName}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {a.occupation} &bull; {a.academicStatus} &bull; {a.email}
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <StatusBadge status={a.currentStatus} />
-                <ChevronRight className="w-4 h-4 text-ink-faint" />
-              </div>
-            </button>
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={a.currentStatus} />
+                  <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                </div>
+              </CardContent>
+            </Card>
           ))}
+          <Pagination currentPage={currentPage} totalItems={totalItems} onPageChange={setCurrentPage} />
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }
+

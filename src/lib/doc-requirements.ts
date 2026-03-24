@@ -7,6 +7,7 @@ const OCCUPATION_DOCS: Record<Occupation, string[]> = {
   Nurse: ["Nursing_Diploma", "Nursing_License", "Clinical_Training_Certificate"],
   Doctor: ["Medical_Diploma", "Medical_License", "Specialty_Certificate", "Approbation_Docs"],
   Engineer: ["Engineering_Diploma", "Professional_Certification", "Work_Experience_Letter"],
+  Other: ["Professional_Diploma", "Work_Experience_Letter"],
 };
 
 const ACADEMIC_EXTRAS: Partial<Record<AcademicStatus, string[]>> = {

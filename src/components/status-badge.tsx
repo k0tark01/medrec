@@ -1,28 +1,29 @@
 import type { ProfileStatus, DocStatus, BillingStatus } from "@/lib/types";
+import { Badge } from "@/components/ui/badge";
 
 const STATUS_STYLES: Record<string, string> = {
-  Draft: "bg-ink-muted/15 text-ink-muted",
-  Reviewing: "bg-yellow-500/15 text-yellow-600",
-  Ready_for_Partner: "bg-accent/15 text-accent-bold",
-  Submitted_to_Partner: "bg-purple-500/15 text-purple-600",
-  Invoiced: "bg-orange-500/15 text-orange-600",
-  Paid: "bg-green-500/15 text-green-600",
-  Hired: "bg-emerald-500/15 text-emerald-600",
+  Draft: "bg-muted text-muted-foreground border-transparent",
+  Reviewing: "bg-yellow-500/15 text-yellow-600 border-transparent",
+  Ready_for_Partner: "bg-primary/15 text-primary border-transparent",
+  Submitted_to_Partner: "bg-purple-500/15 text-purple-600 border-transparent",
+  Invoiced: "bg-orange-500/15 text-orange-600 border-transparent",
+  Paid: "bg-green-500/15 text-green-600 border-transparent",
+  Hired: "bg-emerald-500/15 text-emerald-600 border-transparent",
   // Doc statuses
-  Missing: "bg-ink-muted/15 text-ink-muted",
-  Uploaded: "bg-accent/15 text-accent-bold",
-  Needs_Correction: "bg-red-500/15 text-red-500",
-  Verified: "bg-green-500/15 text-green-600",
+  Missing: "bg-muted text-muted-foreground border-transparent",
+  Uploaded: "bg-primary/15 text-primary border-transparent",
+  Needs_Correction: "bg-red-500/15 text-red-500 border-transparent",
+  Verified: "bg-green-500/15 text-green-600 border-transparent",
   // Billing statuses
-  Unpaid: "bg-red-500/15 text-red-500",
-  Cancelled: "bg-ink-muted/15 text-ink-muted",
+  Unpaid: "bg-red-500/15 text-red-500 border-transparent",
+  Cancelled: "bg-muted text-muted-foreground border-transparent",
 };
 
 export function StatusBadge({ status }: { status: ProfileStatus | DocStatus | BillingStatus | string }) {
-  const style = STATUS_STYLES[status] ?? "bg-dim text-ink-secondary";
+  const style = STATUS_STYLES[status] ?? "bg-muted text-muted-foreground border-transparent";
   return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${style}`}>
+    <Badge variant="outline" className={style}>
       {status.replace(/_/g, " ")}
-    </span>
+    </Badge>
   );
 }

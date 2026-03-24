@@ -1,4 +1,4 @@
-export type Occupation = "Nurse" | "Doctor" | "Engineer";
+export type Occupation = "Nurse" | "Doctor" | "Engineer" | "Other";
 export type AcademicStatus = "Graduated" | "Student" | "Ausbildung";
 export type Role = "applicant" | "reviewer" | "admin";
 export type ProfileStatus =

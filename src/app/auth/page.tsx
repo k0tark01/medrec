@@ -3,8 +3,18 @@
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
-import { LogIn, UserPlus, Sun, Moon } from "lucide-react";
 import { useTheme } from "@/lib/theme-context";
+import { useTranslation } from "@/lib/language-context";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Globe, Sun, Moon, ArrowRight, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { loginSchema, registerSchema } from "@/lib/validations";
+import { toast } from "sonner";
 
 export default function AuthPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -16,6 +26,7 @@ export default function AuthPage() {
   const { login, register } = useAuth();
   const router = useRouter();
   const { theme, toggleTheme } = useTheme();
+  const { t } = useTranslation();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -23,18 +34,29 @@ export default function AuthPage() {
     setSubmitting(true);
     try {
       if (mode === "login") {
+        const result = loginSchema.safeParse({ email, password });
+        if (!result.success) {
+          setError(result.error.issues[0].message);
+          setSubmitting(false);
+          return;
+        }
         await login(email, password);
+        toast.success(t.auth.welcomeBack);
+        // Login will set user state; dashboard layout handles email verification check
+        router.push("/dashboard");
       } else {
-        if (!name.trim()) {
-          setError("Name is required");
+        const result = registerSchema.safeParse({ name, email, password });
+        if (!result.success) {
+          setError(result.error.issues[0].message);
           setSubmitting(false);
           return;
         }
         await register(email, password, name);
+        toast.success(t.auth.createAccount);
+        router.push("/auth/verify-email");
       }
-      router.push("/dashboard");
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Something went wrong";
+      const message = err instanceof Error ? err.message : t.auth.somethingWrong;
       setError(message);
     } finally {
       setSubmitting(false);
@@ -42,87 +64,130 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-page px-4 relative">
-      <button
-        onClick={toggleTheme}
-        className="absolute top-4 right-4 p-2 rounded-lg bg-card shadow hover:bg-card-hover transition"
-        title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
-      >
-        {theme === "light" ? <Moon className="w-5 h-5 text-ink-muted" /> : <Sun className="w-5 h-5 text-yellow-400" />}
-      </button>
-      <div className="w-full max-w-md bg-card rounded-2xl shadow-lg p-8">
-        <h1 className="text-2xl font-bold text-center text-ink mb-2">
-          Job Bridge
-        </h1>
-        <p className="text-center text-ink-muted mb-8 text-sm">Tunisia â†’ Germany Recruitment Platform</p>
+    <div className="min-h-screen flex bg-background">
+      {/* Left side — branding panel */}
+      <div className="hidden lg:flex lg:w-1/2 gradient-hero relative overflow-hidden items-center justify-center p-12">
+        <div className="relative z-10 max-w-md">
+          <div className="flex items-center gap-3 mb-8">
+            <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center">
+              <Globe className="w-5 h-5 text-white" />
+            </div>
+            <span className="text-2xl font-bold text-white">Job Bridge</span>
+          </div>
+          <h2 className="text-3xl font-bold text-white mb-4 leading-tight">
+            {t.auth.brandingTitle}
+          </h2>
+          <p className="text-white/70 leading-relaxed mb-8">
+            {t.auth.brandingDesc}
+          </p>
+          <div className="space-y-3">
+            {[t.auth.feature1, t.auth.feature2, t.auth.feature3].map((f) => (
+              <div key={f} className="flex items-center gap-3 text-white/80 text-sm">
+                <div className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center">
+                  <ArrowRight className="w-3 h-3" />
+                </div>
+                {f}
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Decorative circles */}
+        <div className="absolute -bottom-24 -right-24 w-64 h-64 rounded-full bg-white/5" />
+        <div className="absolute -top-12 -left-12 w-48 h-48 rounded-full bg-white/5" />
+      </div>
 
-        <div className="flex mb-6 rounded-lg bg-dim p-1">
-          <button
-            onClick={() => setMode("login")}
-            className={`flex-1 py-2 text-sm font-medium rounded-md transition ${
-              mode === "login" ? "bg-card shadow text-ink" : "text-ink-muted"
-            }`}
-          >
-            <LogIn className="inline w-4 h-4 mr-1" /> Sign In
-          </button>
-          <button
-            onClick={() => setMode("register")}
-            className={`flex-1 py-2 text-sm font-medium rounded-md transition ${
-              mode === "register" ? "bg-card shadow text-ink" : "text-ink-muted"
-            }`}
-          >
-            <UserPlus className="inline w-4 h-4 mr-1" /> Register
+      {/* Right side — form */}
+      <div className="flex-1 flex items-center justify-center p-6 relative">
+        <div className="absolute top-4 right-4 flex items-center gap-2">
+          <LanguageSwitcher compact />
+          <button onClick={toggleTheme} className="p-2 rounded-lg hover:bg-muted transition-colors">
+            {theme === "light" ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4 text-yellow-400" />}
           </button>
         </div>
 
-        {error && (
-          <div className="bg-err-bg text-err text-sm p-3 rounded-lg mb-4">{error}</div>
-        )}
+        <div className="w-full max-w-sm">
+          <div className="lg:hidden flex items-center gap-2 mb-8">
+            <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
+              <Globe className="w-4 h-4 text-white" />
+            </div>
+            <span className="font-bold text-lg">Job Bridge</span>
+          </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {mode === "register" && (
-            <div>
-              <label className="block text-sm font-medium text-ink-secondary mb-1">Full Name</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="w-full border border-line-strong rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-accent focus:border-transparent outline-none"
-                placeholder="Ahmed Ben Ali"
+          <h1 className="text-2xl font-bold text-foreground mb-1">
+            {mode === "login" ? t.auth.welcomeBack : t.auth.createAccount}
+          </h1>
+          <p className="text-muted-foreground text-sm mb-6">
+            {mode === "login" ? t.auth.signInDesc : t.auth.registerDesc}
+          </p>
+
+          <Tabs value={mode} onValueChange={(v) => setMode(v as "login" | "register")} className="mb-6">
+            <TabsList className="w-full">
+              <TabsTrigger value="login" className="flex-1">{t.signIn}</TabsTrigger>
+              <TabsTrigger value="register" className="flex-1">{t.register}</TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {error && (
+            <Card className="mb-4 border-destructive/30 bg-destructive/5">
+              <CardContent className="py-3 px-4 text-sm text-destructive">{error}</CardContent>
+            </Card>
+          )}
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {mode === "register" && (
+              <div className="space-y-2">
+                <Label htmlFor="name">{t.auth.fullName}</Label>
+                <Input
+                  id="name"
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ahmed Ben Ali"
+                />
+              </div>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="email">{t.auth.email}</Label>
+              <Input
+                id="email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
               />
             </div>
-          )}
-          <div>
-            <label className="block text-sm font-medium text-ink-secondary mb-1">Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full border border-line-strong rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-accent focus:border-transparent outline-none"
-              placeholder="you@example.com"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-ink-secondary mb-1">Password</label>
-            <input
-              type="password"
-              required
-              minLength={8}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-line-strong rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-accent focus:border-transparent outline-none"
-              placeholder="Min 8 characters"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full bg-accent-bold text-white py-2.5 rounded-lg font-medium text-sm hover:bg-accent-bolder transition disabled:opacity-50"
-          >
-            {submitting ? "Please wait..." : mode === "login" ? "Sign In" : "Create Account"}
-          </button>
-        </form>
+            <div className="space-y-2">
+              <Label htmlFor="password">{t.auth.password}</Label>
+              <Input
+                id="password"
+                type="password"
+                required
+                minLength={8}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={t.auth.minChars}
+              />
+              {mode === "login" && (
+                <div className="text-right">
+                  <Link href="/auth/forgot-password" className="text-xs text-primary hover:underline">
+                    {t.passwordReset.forgotPassword}
+                  </Link>
+                </div>
+              )}
+            </div>
+            <Button type="submit" disabled={submitting} className="w-full gradient-primary text-white border-0 h-11">
+              {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+              {submitting ? t.pleaseWait : mode === "login" ? t.signIn : t.auth.createAccountBtn}
+            </Button>
+          </form>
+
+          <p className="text-center text-xs text-muted-foreground mt-6">
+            <Link href="/" className="hover:text-foreground transition-colors">
+              &larr; {t.backToHome}
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   );

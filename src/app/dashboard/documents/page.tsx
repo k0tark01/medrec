@@ -7,11 +7,17 @@ import { Query } from "appwrite";
 import { getRequiredDocs, formatDocType } from "@/lib/doc-requirements";
 import { StatusBadge } from "@/components/status-badge";
 import type { DocRecord } from "@/lib/types";
-import { Upload, Eye, AlertTriangle, CheckCircle, FileText, Send } from "lucide-react";
+import { Upload, Eye, AlertTriangle, CheckCircle, FileText, Send, Loader2 } from "lucide-react";
 import { ID } from "appwrite";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { useTranslation } from "@/lib/language-context";
+import { toast } from "sonner";
+import { ListSkeleton } from "@/components/ui/skeleton";
 
 export default function DocumentsPage() {
   const { profile, refreshProfile } = useAuth();
+  const { t } = useTranslation();
   const [docs, setDocs] = useState<DocRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -38,8 +44,6 @@ export default function DocumentsPage() {
   if (!profile) return null;
 
   const requiredDocs = getRequiredDocs(profile.occupation, profile.academicStatus);
-
-  // Merge: for each required doc type, find or create a placeholder
   const docMap = new Map(docs.map((d) => [d.docType, d]));
 
   async function handleUpload(docType: string, variant: "original" | "translated", file: File) {
@@ -65,7 +69,7 @@ export default function DocumentsPage() {
       }
       await loadDocs();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Upload failed");
+      toast.error(err instanceof Error ? err.message : t.docs.uploadFailed);
     } finally {
       setUploading(null);
     }
@@ -80,7 +84,7 @@ export default function DocumentsPage() {
       });
       await refreshProfile();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Submission failed");
+      toast.error(err instanceof Error ? err.message : t.docs.submissionFailed);
     } finally {
       setSubmitting(false);
     }
@@ -97,27 +101,25 @@ export default function DocumentsPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-ink">Documents</h1>
-          <p className="text-sm text-ink-muted mt-1">
-            Upload original + translated versions of each required document.
+          <h1 className="text-2xl font-bold text-foreground">{t.docs.title}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {t.docs.desc}
           </p>
         </div>
         {canSubmit && (
-          <button
+          <Button
             onClick={handleSubmitDossier}
             disabled={submitting}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition disabled:opacity-50"
+            className="bg-green-600 hover:bg-green-700 text-white"
           >
-            <Send className="w-4 h-4" />
-            {submitting ? "Submitting..." : "Submit for Review"}
-          </button>
+            {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
+            {submitting ? t.submitting : t.docs.submitForReview}
+          </Button>
         )}
       </div>
 
       {loading ? (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-bold" />
-        </div>
+        <ListSkeleton count={4} />
       ) : (
         <div className="space-y-4">
           {requiredDocs.map((docType) => {
@@ -125,41 +127,41 @@ export default function DocumentsPage() {
             const status = doc?.status ?? "Missing";
 
             return (
-              <div key={docType} className="bg-card rounded-xl border border-line p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-ink-faint" />
-                    <span className="font-medium text-ink">{formatDocType(docType)}</span>
+              <Card key={docType}>
+                <CardContent className="p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      <span className="font-medium text-foreground">{formatDocType(docType)}</span>
+                    </div>
+                    <StatusBadge status={status} />
                   </div>
-                  <StatusBadge status={status} />
-                </div>
 
-                {doc?.reviewerNotes && status === "Needs_Correction" && (
-                  <div className="bg-err-bg border border-red-200 rounded-lg p-3 mb-3 text-sm text-red-700 flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                    <span>{doc.reviewerNotes}</span>
+                  {doc?.reviewerNotes && status === "Needs_Correction" && (
+                    <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 mb-3 text-sm text-destructive flex items-start gap-2">
+                      <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                      <span>{doc.reviewerNotes}</span>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <FileSlot
+                      label={t.docs.original}
+                      hasFile={!!doc?.originalFileId}
+                      uploading={uploading === `${docType}-original`}
+                      onFileSelect={(f) => handleUpload(docType, "original", f)}
+                      disabled={status === "Verified"}
+                    />
+                    <FileSlot
+                      label={t.docs.translation}
+                      hasFile={!!doc?.translatedFileId}
+                      uploading={uploading === `${docType}-translated`}
+                      onFileSelect={(f) => handleUpload(docType, "translated", f)}
+                      disabled={status === "Verified"}
+                    />
                   </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Original */}
-                  <FileSlot
-                    label="Original (FR/AR)"
-                    hasFile={!!doc?.originalFileId}
-                    uploading={uploading === `${docType}-original`}
-                    onFileSelect={(f) => handleUpload(docType, "original", f)}
-                    disabled={status === "Verified"}
-                  />
-                  {/* Translated */}
-                  <FileSlot
-                    label="Translation (DE)"
-                    hasFile={!!doc?.translatedFileId}
-                    uploading={uploading === `${docType}-translated`}
-                    onFileSelect={(f) => handleUpload(docType, "translated", f)}
-                    disabled={status === "Verified"}
-                  />
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             );
           })}
         </div>
@@ -181,20 +183,21 @@ function FileSlot({
   onFileSelect: (file: File) => void;
   disabled: boolean;
 }) {
+  const { t } = useTranslation();
   return (
-    <div className={`border rounded-lg p-3 ${hasFile ? "border-green-200 bg-green-50" : "border-dashed border-line-strong"}`}>
+    <div className={`border rounded-lg p-3 ${hasFile ? "border-green-500/30 bg-green-500/5" : "border-dashed border-border"}`}>
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium text-ink-secondary">{label}</span>
+        <span className="text-xs font-medium text-muted-foreground">{label}</span>
         {hasFile && <CheckCircle className="w-4 h-4 text-green-600" />}
       </div>
       {!disabled && (
-        <label className="flex items-center justify-center gap-2 py-2 px-3 bg-card border border-line rounded-lg text-sm text-ink-secondary hover:bg-card-hover cursor-pointer transition">
+        <label className="flex items-center justify-center gap-2 py-2 px-3 bg-muted border border-border rounded-lg text-sm text-muted-foreground hover:bg-accent hover:text-foreground cursor-pointer transition-colors">
           {uploading ? (
-            <span className="animate-pulse">Uploading...</span>
+            <span className="animate-pulse">{t.uploading}</span>
           ) : (
             <>
               {hasFile ? <Eye className="w-4 h-4" /> : <Upload className="w-4 h-4" />}
-              {hasFile ? "Replace" : "Upload"}
+              {hasFile ? t.docs.replace : t.docs.upload}
             </>
           )}
           <input
@@ -211,7 +214,7 @@ function FileSlot({
         </label>
       )}
       {disabled && (
-        <div className="text-xs text-green-600 font-medium">Verified Ã¢â‚¬â€ locked</div>
+        <div className="text-xs text-green-600 font-medium">{t.docs.verifiedLocked}</div>
       )}
     </div>
   );

@@ -7,12 +7,27 @@ import { StatusBadge } from "@/components/status-badge";
 import type { Profile, BillingRecord } from "@/lib/types";
 import { Users, CreditCard, Plus, BarChart3 } from "lucide-react";
 import { ID } from "appwrite";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useTranslation } from "@/lib/language-context";
+import { toast } from "sonner";
+import { invoiceSchema } from "@/lib/validations";
+import { StatCardSkeleton, ListSkeleton } from "@/components/ui/skeleton";
+import { logAuditEvent } from "@/lib/audit";
+import type { AuditLog } from "@/lib/types";
+import { Query } from "appwrite";
+import { ScrollText, Clock } from "lucide-react";
 
 export default function AdminPage() {
   const { profile } = useAuth();
+  const { t } = useTranslation();
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [invoices, setInvoices] = useState<BillingRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
   const [invoiceTarget, setInvoiceTarget] = useState("");
   const [invoiceAmount, setInvoiceAmount] = useState("");
@@ -22,12 +37,17 @@ export default function AdminPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [pRes, bRes] = await Promise.all([
+        const [pRes, bRes, aRes] = await Promise.all([
           databases.listDocuments(DATABASE_ID, COLLECTIONS.PROFILES),
           databases.listDocuments(DATABASE_ID, COLLECTIONS.BILLING),
+          databases.listDocuments(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, [
+            Query.orderDesc("$createdAt"),
+            Query.limit(50),
+          ]),
         ]);
         setProfiles(pRes.documents as unknown as Profile[]);
         setInvoices(bRes.documents as unknown as BillingRecord[]);
+        setAuditLogs(aRes.documents as unknown as AuditLog[]);
       } catch {
         // empty
       } finally {
@@ -38,7 +58,16 @@ export default function AdminPage() {
   }, []);
 
   async function createInvoice() {
-    if (!invoiceTarget || !invoiceAmount) return;
+    const result = invoiceSchema.safeParse({
+      profileId: invoiceTarget,
+      amount: parseFloat(invoiceAmount) || 0,
+      invoiceType,
+      description: invoiceDesc || undefined,
+    });
+    if (!result.success) {
+      toast.error(result.error.issues[0].message);
+      return;
+    }
     try {
       await databases.createDocument(DATABASE_ID, COLLECTIONS.BILLING, ID.unique(), {
         profileId: invoiceTarget,
@@ -49,11 +78,13 @@ export default function AdminPage() {
       });
       const bRes = await databases.listDocuments(DATABASE_ID, COLLECTIONS.BILLING);
       setInvoices(bRes.documents as unknown as BillingRecord[]);
+      await logAuditEvent({ userId: profile!.$id, action: "createInvoice", targetId: invoiceTarget, targetType: "billing", details: `${invoiceType} — ${invoiceAmount} TND` });
       setShowInvoiceForm(false);
       setInvoiceAmount("");
       setInvoiceDesc("");
+      toast.success(t.admin.createInvoice + " ✓");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to create invoice");
+      toast.error(err instanceof Error ? err.message : t.admin.failedCreate);
     }
   }
 
@@ -61,10 +92,10 @@ export default function AdminPage() {
     await databases.updateDocument(DATABASE_ID, COLLECTIONS.BILLING, inv.$id, {
       status: "Paid",
     });
+    await logAuditEvent({ userId: profile!.$id, action: "markPaid", targetId: inv.$id, targetType: "billing", details: `${inv.invoiceType} — ${inv.amount} TND` });
     setInvoices((prev) =>
       prev.map((i) => (i.$id === inv.$id ? { ...i, status: "Paid" as const } : i))
     );
-    // Also update the profile status
     await databases.updateDocument(DATABASE_ID, COLLECTIONS.PROFILES, inv.profileId, {
       currentStatus: "Paid",
     });
@@ -72,19 +103,26 @@ export default function AdminPage() {
 
   async function updateRole(p: Profile, role: "applicant" | "reviewer" | "admin") {
     await databases.updateDocument(DATABASE_ID, COLLECTIONS.PROFILES, p.$id, { role });
+    await logAuditEvent({ userId: profile!.$id, action: "roleChange", targetId: p.$id, targetType: "profile", details: `${p.fullName}: ${p.role} → ${role}` });
     setProfiles((prev) =>
       prev.map((pr) => (pr.$id === p.$id ? { ...pr, role } : pr))
     );
   }
 
   if (!profile || profile.role !== "admin") {
-    return <p className="text-ink-muted">Admin access required.</p>;
+    return <p className="text-muted-foreground">{t.admin.adminRequired}</p>;
   }
 
   if (loading) {
     return (
-      <div className="flex justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent-bold" />
+      <div className="space-y-8">
+        <h1 className="text-2xl font-bold text-foreground">{t.admin.title}</h1>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <StatCardSkeleton key={i} />
+          ))}
+        </div>
+        <ListSkeleton count={4} />
       </div>
     );
   }
@@ -94,47 +132,56 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold text-ink">Admin Panel</h1>
+      <h1 className="text-2xl font-bold text-foreground">{t.admin.title}</h1>
 
       {/* Analytics */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-card rounded-xl border border-line p-5">
-          <div className="flex items-center gap-2 mb-2"><Users className="w-4 h-4 text-accent-bold" /><span className="text-sm text-ink-secondary">Total Users</span></div>
-          <div className="text-2xl font-bold text-ink">{profiles.length}</div>
-        </div>
-        <div className="bg-card rounded-xl border border-line p-5">
-          <div className="flex items-center gap-2 mb-2"><BarChart3 className="w-4 h-4 text-green-600" /><span className="text-sm text-ink-secondary">Revenue (Paid)</span></div>
-          <div className="text-2xl font-bold text-ink">{totalRevenue.toFixed(2)} TND</div>
-        </div>
-        <div className="bg-card rounded-xl border border-line p-5">
-          <div className="flex items-center gap-2 mb-2"><CreditCard className="w-4 h-4 text-orange-500" /><span className="text-sm text-ink-secondary">Pending</span></div>
-          <div className="text-2xl font-bold text-ink">{pendingRevenue.toFixed(2)} TND</div>
-        </div>
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-2"><Users className="w-4 h-4 text-primary" /><span className="text-sm text-muted-foreground">{t.admin.totalUsers}</span></div>
+            <div className="text-2xl font-bold text-foreground">{profiles.length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-2"><BarChart3 className="w-4 h-4 text-green-600" /><span className="text-sm text-muted-foreground">{t.admin.revenuePaid}</span></div>
+            <div className="text-2xl font-bold text-foreground">{totalRevenue.toFixed(2)} TND</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-center gap-2 mb-2"><CreditCard className="w-4 h-4 text-orange-500" /><span className="text-sm text-muted-foreground">{t.admin.pending}</span></div>
+            <div className="text-2xl font-bold text-foreground">{pendingRevenue.toFixed(2)} TND</div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* User management */}
       <section>
-        <h2 className="text-lg font-semibold text-ink mb-3">User Management</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-3">{t.admin.userManagement}</h2>
         <div className="space-y-2">
           {profiles.map((p) => (
-            <div key={p.$id} className="bg-card rounded-xl border border-line p-4 flex items-center justify-between">
-              <div>
-                <div className="font-medium text-ink">{p.fullName}</div>
-                <div className="text-xs text-ink-muted">{p.email} Ã¢â‚¬Â¢ {p.occupation}</div>
-              </div>
-              <div className="flex items-center gap-3">
-                <StatusBadge status={p.currentStatus} />
-                <select
-                  value={p.role}
-                  onChange={(e) => updateRole(p, e.target.value as "applicant" | "reviewer" | "admin")}
-                  className="text-xs border border-line rounded-lg px-2 py-1 bg-card"
-                >
-                  <option value="applicant">Applicant</option>
-                  <option value="reviewer">Reviewer</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </div>
-            </div>
+            <Card key={p.$id}>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <div className="font-medium text-foreground">{p.fullName}</div>
+                  <div className="text-xs text-muted-foreground">{p.email} &bull; {p.occupation}</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={p.currentStatus} />
+                  <Select value={p.role} onValueChange={(v) => updateRole(p, v as "applicant" | "reviewer" | "admin")}>
+                    <SelectTrigger className="w-[120px] h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="applicant">{t.admin.applicantRole}</SelectItem>
+                      <SelectItem value="reviewer">{t.admin.reviewerRole}</SelectItem>
+                      <SelectItem value="admin">{t.admin.adminRole}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       </section>
@@ -142,100 +189,136 @@ export default function AdminPage() {
       {/* Invoicing */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-semibold text-ink">Invoices</h2>
-          <button
-            onClick={() => setShowInvoiceForm(!showInvoiceForm)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-accent-bold text-white text-sm rounded-lg hover:bg-accent-bolder"
-          >
-            <Plus className="w-4 h-4" /> New Invoice
-          </button>
+          <h2 className="text-lg font-semibold text-foreground">{t.admin.invoices}</h2>
+          <Button onClick={() => setShowInvoiceForm(!showInvoiceForm)} className="gradient-primary text-white border-0" size="sm">
+            <Plus className="w-4 h-4 mr-1.5" /> {t.admin.newInvoice}
+          </Button>
         </div>
 
         {showInvoiceForm && (
-          <div className="bg-card rounded-xl border border-line p-5 mb-4 space-y-3">
-            <div>
-              <label className="block text-sm font-medium text-ink-secondary mb-1">Applicant</label>
-              <select
-                value={invoiceTarget}
-                onChange={(e) => setInvoiceTarget(e.target.value)}
-                className="w-full border border-line-strong rounded-lg px-3 py-2 text-sm"
-              >
-                <option value="">Select applicant</option>
-                {profiles.filter((p) => p.role === "applicant").map((p) => (
-                  <option key={p.$id} value={p.$id}>{p.fullName} ({p.email})</option>
-                ))}
-              </select>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-ink-secondary mb-1">Amount (TND)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={invoiceAmount}
-                  onChange={(e) => setInvoiceAmount(e.target.value)}
-                  className="w-full border border-line-strong rounded-lg px-3 py-2 text-sm"
+          <Card className="mb-4">
+            <CardContent className="p-5 space-y-3">
+              <div className="space-y-2">
+                <Label>{t.admin.applicant}</Label>
+                <Select value={invoiceTarget} onValueChange={(v) => setInvoiceTarget(v ?? "")}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={t.admin.selectApplicant} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {profiles.filter((p) => p.role === "applicant").map((p) => (
+                      <SelectItem key={p.$id} value={p.$id}>{p.fullName} ({p.email})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>{t.admin.amount}</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={invoiceAmount}
+                    onChange={(e) => setInvoiceAmount(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>{t.admin.type}</Label>
+                  <Select value={invoiceType} onValueChange={(v) => setInvoiceType(v as typeof invoiceType)}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Deposit">{t.admin.deposit}</SelectItem>
+                      <SelectItem value="Success_Fee">{t.admin.successFee}</SelectItem>
+                      <SelectItem value="Other">{t.admin.other}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>{t.admin.descriptionOptional}</Label>
+                <Input
+                  type="text"
+                  value={invoiceDesc}
+                  onChange={(e) => setInvoiceDesc(e.target.value)}
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-ink-secondary mb-1">Type</label>
-                <select
-                  value={invoiceType}
-                  onChange={(e) => setInvoiceType(e.target.value as typeof invoiceType)}
-                  className="w-full border border-line-strong rounded-lg px-3 py-2 text-sm"
-                >
-                  <option value="Deposit">Deposit</option>
-                  <option value="Success_Fee">Success Fee</option>
-                  <option value="Other">Other</option>
-                </select>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-ink-secondary mb-1">Description (optional)</label>
-              <input
-                type="text"
-                value={invoiceDesc}
-                onChange={(e) => setInvoiceDesc(e.target.value)}
-                className="w-full border border-line-strong rounded-lg px-3 py-2 text-sm"
-              />
-            </div>
-            <button
-              onClick={createInvoice}
-              className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700"
-            >
-              Create Invoice
-            </button>
-          </div>
+              <Button onClick={createInvoice} className="bg-green-600 hover:bg-green-700 text-white">
+                {t.admin.createInvoice}
+              </Button>
+            </CardContent>
+          </Card>
         )}
 
         <div className="space-y-2">
           {invoices.map((inv) => (
-            <div key={inv.$id} className="bg-card rounded-xl border border-line p-4 flex items-center justify-between">
-              <div>
-                <div className="text-sm font-medium text-ink">
-                  {inv.invoiceType.replace(/_/g, " ")} Ã¢â‚¬â€ {inv.amount.toFixed(2)} TND
+            <Card key={inv.$id}>
+              <CardContent className="p-4 flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-medium text-foreground">
+                    {inv.invoiceType.replace(/_/g, " ")} &mdash; {inv.amount.toFixed(2)} TND
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Profile: {inv.profileId} &bull; {new Date(inv.$createdAt).toLocaleDateString()}
+                  </div>
                 </div>
-                <div className="text-xs text-ink-muted">
-                  Profile: {inv.profileId} Ã¢â‚¬Â¢ {new Date(inv.$createdAt).toLocaleDateString()}
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={inv.status} />
+                  {inv.status === "Unpaid" && (
+                    <Button
+                      onClick={() => markInvoicePaid(inv)}
+                      size="sm"
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      {t.admin.markPaid}
+                    </Button>
+                  )}
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <StatusBadge status={inv.status} />
-                {inv.status === "Unpaid" && (
-                  <button
-                    onClick={() => markInvoicePaid(inv)}
-                    className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded-lg hover:bg-green-300"
-                  >
-                    Mark Paid
-                  </button>
-                )}
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           ))}
           {invoices.length === 0 && (
-            <p className="text-ink-muted py-4 text-center text-sm">No invoices created yet.</p>
+            <p className="text-muted-foreground py-4 text-center text-sm">{t.admin.noInvoicesYet}</p>
           )}
         </div>
+      </section>
+
+      {/* Audit Log */}
+      <section>
+        <div className="flex items-center gap-2 mb-3">
+          <ScrollText className="w-5 h-5 text-muted-foreground" />
+          <h2 className="text-lg font-semibold text-foreground">{t.auditLog.title}</h2>
+        </div>
+        {auditLogs.length === 0 ? (
+          <p className="text-muted-foreground py-4 text-center text-sm">{t.auditLog.noLogs}</p>
+        ) : (
+          <div className="space-y-2">
+            {auditLogs.map((log) => {
+              const actionKey = log.action as keyof typeof t.auditLog.actions;
+              const actionLabel = t.auditLog.actions[actionKey] || log.action;
+              const actor = profiles.find((p) => p.$id === log.userId);
+              return (
+                <Card key={log.$id}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-sm font-medium text-foreground">{actionLabel}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {actor ? actor.fullName : log.userId}
+                          {log.details && <> &bull; {log.details}</>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Clock className="w-3 h-3" />
+                        {new Date(log.$createdAt).toLocaleString()}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </section>
     </div>
   );

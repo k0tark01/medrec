@@ -13,22 +13,19 @@ interface ThemeState {
 const ThemeContext = createContext<ThemeState | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("light");
+  const [theme, setThemeState] = useState<Theme>(() => {
+    if (typeof window === "undefined") return "dark";
+    const stored = localStorage.getItem("jb-theme") as Theme | null;
+    return stored ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  });
 
   useEffect(() => {
-    const stored = localStorage.getItem("jb-theme") as Theme | null;
-    const preferred = stored ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    setThemeState(preferred);
-    document.documentElement.setAttribute("data-theme", preferred);
-  }, []);
+    localStorage.setItem("jb-theme", theme);
+    document.documentElement.classList.toggle("dark", theme === "dark");
+  }, [theme]);
 
-  const setTheme = (t: Theme) => {
-    setThemeState(t);
-    localStorage.setItem("jb-theme", t);
-    document.documentElement.setAttribute("data-theme", t);
-  };
-
-  const toggleTheme = () => setTheme(theme === "light" ? "dark" : "light");
+  const setTheme = (t: Theme) => setThemeState(t);
+  const toggleTheme = () => setThemeState((prev) => (prev === "light" ? "dark" : "light"));
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme, setTheme }}>
