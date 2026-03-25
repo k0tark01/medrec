@@ -18,6 +18,7 @@ function ResetPasswordForm() {
   const searchParams = useSearchParams();
   const userId = searchParams.get("userId") ?? "";
   const secret = searchParams.get("secret") ?? "";
+  const expire = searchParams.get("expire") ?? "";
 
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -26,7 +27,9 @@ function ResetPasswordForm() {
   const { theme, toggleTheme } = useTheme();
   const { t } = useTranslation();
 
-  const isValidLink = userId && secret;
+  const parsedExpire = expire ? Date.parse(expire) : NaN;
+  const isExpired = expire ? Number.isNaN(parsedExpire) || parsedExpire <= Date.now() : false;
+  const isValidLink = userId && secret && !isExpired;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -36,7 +39,44 @@ function ResetPasswordForm() {
     }
     setSubmitting(true);
     try {
+      const checkResponse = await fetch("/api/auth/complete-recovery", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          secret,
+          action: "check",
+          expire,
+        }),
+      });
+
+      const checkData = (await checkResponse.json().catch(() => ({}))) as { error?: string };
+
+      if (!checkResponse.ok) {
+        throw new Error(checkData.error || t.auth.somethingWrong);
+      }
+
       await account.updateRecovery(userId, secret, password);
+
+      const markResponse = await fetch("/api/auth/complete-recovery", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          secret,
+          action: "mark-used",
+          password,
+          confirmPassword,
+          expire,
+        }),
+      });
+
+      const markData = (await markResponse.json().catch(() => ({}))) as { error?: string };
+
+      if (!markResponse.ok) {
+        throw new Error(markData.error || t.auth.somethingWrong);
+      }
+
       setSuccess(true);
       toast.success(t.passwordReset.success);
     } catch (err: unknown) {

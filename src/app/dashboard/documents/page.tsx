@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { useEffect, useState, useCallback } from "react";
-import { databases, storage, DATABASE_ID, COLLECTIONS, BUCKET_ORIGINALS, BUCKET_TRANSLATIONS } from "@/lib/appwrite";
+import { account, databases, storage, DATABASE_ID, COLLECTIONS, BUCKET_ORIGINALS, BUCKET_TRANSLATIONS } from "@/lib/appwrite";
 import { Query } from "appwrite";
 import { getRequiredDocs, formatDocType } from "@/lib/doc-requirements";
 import { StatusBadge } from "@/components/status-badge";
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/lib/language-context";
 import { toast } from "sonner";
 import { ListSkeleton } from "@/components/ui/skeleton";
+import { canTransitionProfileStatus, getTransitionError } from "@/lib/review-workflow";
 
 export default function DocumentsPage() {
   const { profile, refreshProfile } = useAuth();
@@ -42,12 +43,19 @@ export default function DocumentsPage() {
   }, [loadDocs]);
 
   if (!profile) return null;
+  if (profile.role !== "applicant") {
+    return <p className="text-muted-foreground">{t.review.noAccess}</p>;
+  }
 
   const requiredDocs = getRequiredDocs(profile.occupation, profile.academicStatus);
   const docMap = new Map(docs.map((d) => [d.docType, d]));
 
   async function handleUpload(docType: string, variant: "original" | "translated", file: File) {
     if (!profile) return;
+    if (profile.currentStatus !== "Draft") {
+      toast.error("Documents are locked while your application is under review.");
+      return;
+    }
     setUploading(`${docType}-${variant}`);
     try {
       const bucket = variant === "original" ? BUCKET_ORIGINALS : BUCKET_TRANSLATIONS;
@@ -77,11 +85,28 @@ export default function DocumentsPage() {
 
   async function handleSubmitDossier() {
     if (!profile) return;
+    if (!canTransitionProfileStatus(profile.currentStatus, "Reviewing")) {
+      toast.error(getTransitionError(profile.currentStatus, "Reviewing"));
+      return;
+    }
     setSubmitting(true);
     try {
-      await databases.updateDocument(DATABASE_ID, COLLECTIONS.PROFILES, profile.$id, {
-        currentStatus: "Reviewing",
+      const jwt = await account.createJWT();
+      const response = await fetch("/api/workflow/mutate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jwt: jwt.jwt,
+          action: "submitDossier",
+          profileId: profile.$id,
+        }),
       });
+
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error || t.docs.submissionFailed);
+      }
+
       await refreshProfile();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t.docs.submissionFailed);
@@ -96,6 +121,7 @@ export default function DocumentsPage() {
   });
 
   const canSubmit = allUploaded && profile.currentStatus === "Draft";
+  const documentsLocked = profile.currentStatus !== "Draft";
 
   return (
     <div>
@@ -117,6 +143,12 @@ export default function DocumentsPage() {
           </Button>
         )}
       </div>
+
+      {documentsLocked && (
+        <div className="mb-4 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-700 dark:text-yellow-300">
+          Documents are currently locked while your dossier is in review. They will reopen if corrections are requested.
+        </div>
+      )}
 
       {loading ? (
         <ListSkeleton count={4} />
@@ -150,14 +182,14 @@ export default function DocumentsPage() {
                       hasFile={!!doc?.originalFileId}
                       uploading={uploading === `${docType}-original`}
                       onFileSelect={(f) => handleUpload(docType, "original", f)}
-                      disabled={status === "Verified"}
+                      disabled={status === "Verified" || documentsLocked}
                     />
                     <FileSlot
                       label={t.docs.translation}
                       hasFile={!!doc?.translatedFileId}
                       uploading={uploading === `${docType}-translated`}
                       onFileSelect={(f) => handleUpload(docType, "translated", f)}
-                      disabled={status === "Verified"}
+                      disabled={status === "Verified" || documentsLocked}
                     />
                   </div>
                 </CardContent>

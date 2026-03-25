@@ -2,11 +2,10 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { useEffect, useState } from "react";
-import { databases, DATABASE_ID, COLLECTIONS } from "@/lib/appwrite";
+import { account, databases, DATABASE_ID, COLLECTIONS } from "@/lib/appwrite";
 import { StatusBadge } from "@/components/status-badge";
 import type { Profile, BillingRecord } from "@/lib/types";
 import { Users, CreditCard, Plus, BarChart3 } from "lucide-react";
-import { ID } from "appwrite";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +32,20 @@ export default function AdminPage() {
   const [invoiceAmount, setInvoiceAmount] = useState("");
   const [invoiceType, setInvoiceType] = useState<"Deposit" | "Success_Fee" | "Other">("Deposit");
   const [invoiceDesc, setInvoiceDesc] = useState("");
+
+  async function mutateWorkflow(payload: Record<string, unknown>) {
+    const jwt = await account.createJWT();
+    const response = await fetch("/api/workflow/mutate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jwt: jwt.jwt, ...payload }),
+    });
+
+    const data = (await response.json().catch(() => ({}))) as { error?: string };
+    if (!response.ok) {
+      throw new Error(data.error || t.auth.somethingWrong);
+    }
+  }
 
   useEffect(() => {
     async function load() {
@@ -68,17 +81,19 @@ export default function AdminPage() {
       toast.error(result.error.issues[0].message);
       return;
     }
+
     try {
-      await databases.createDocument(DATABASE_ID, COLLECTIONS.BILLING, ID.unique(), {
+      await mutateWorkflow({
+        action: "createInvoice",
         profileId: invoiceTarget,
         amount: parseFloat(invoiceAmount),
-        status: "Unpaid",
         invoiceType,
         description: invoiceDesc || undefined,
       });
       const bRes = await databases.listDocuments(DATABASE_ID, COLLECTIONS.BILLING);
       setInvoices(bRes.documents as unknown as BillingRecord[]);
-      await logAuditEvent({ userId: profile!.$id, action: "createInvoice", targetId: invoiceTarget, targetType: "billing", details: `${invoiceType} — ${invoiceAmount} TND` });
+      const pRes = await databases.listDocuments(DATABASE_ID, COLLECTIONS.PROFILES);
+      setProfiles(pRes.documents as unknown as Profile[]);
       setShowInvoiceForm(false);
       setInvoiceAmount("");
       setInvoiceDesc("");
@@ -89,16 +104,14 @@ export default function AdminPage() {
   }
 
   async function markInvoicePaid(inv: BillingRecord) {
-    await databases.updateDocument(DATABASE_ID, COLLECTIONS.BILLING, inv.$id, {
-      status: "Paid",
+    await mutateWorkflow({
+      action: "markInvoicePaid",
+      invoiceId: inv.$id,
     });
-    await logAuditEvent({ userId: profile!.$id, action: "markPaid", targetId: inv.$id, targetType: "billing", details: `${inv.invoiceType} — ${inv.amount} TND` });
     setInvoices((prev) =>
       prev.map((i) => (i.$id === inv.$id ? { ...i, status: "Paid" as const } : i))
     );
-    await databases.updateDocument(DATABASE_ID, COLLECTIONS.PROFILES, inv.profileId, {
-      currentStatus: "Paid",
-    });
+    setProfiles((prev) => prev.map((p) => (p.$id === inv.profileId ? { ...p, currentStatus: "Paid" } : p)));
   }
 
   async function updateRole(p: Profile, role: "applicant" | "reviewer" | "admin") {

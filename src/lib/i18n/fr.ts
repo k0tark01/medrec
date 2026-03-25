@@ -206,7 +206,14 @@ const fr: Translations = {
     reject: "Rejeter",
     rejectReason: "Raison du rejet :",
     readyForPartner: "Prêt pour le partenaire",
+    precheckPassed: "Pré-contrôle validé",
     markSubmitted: "Marquer comme soumis",
+    approveApplication: "Approuver la candidature",
+    rejectApplication: "Rejeter la candidature",
+    rejectApplicationReasonPlaceholder: "Ajoutez une raison claire du rejet",
+    downloadFolderZip: "Télécharger le dossier ZIP",
+    preparingZip: "Préparation du ZIP...",
+    missingFile: "Manquant",
   },
 
   // Admin page
@@ -325,6 +332,10 @@ const fr: Translations = {
       createInvoice: "Facture créée",
       markPaid: "Facture marquée payée",
       profileUpdate: "Profil mis à jour",
+      correctionRequested: "Corrections demandées",
+      approveApplication: "Candidature approuvée",
+      rejectApplication: "Candidature rejetée",
+      submitDossier: "Dossier soumis pour vérification",
     },
   },
 };

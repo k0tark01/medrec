@@ -2,6 +2,8 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { useState } from "react";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { databases, DATABASE_ID, COLLECTIONS } from "@/lib/appwrite";
 import { useTranslation } from "@/lib/language-context";
 import { Button } from "@/components/ui/button";
@@ -22,6 +24,7 @@ const OCCUPATION_OPTIONS: { value: Occupation; icon: React.ComponentType<{ class
 export default function ProfileEditPage() {
   const { profile, refreshProfile } = useAuth();
   const { t } = useTranslation();
+  const router = useRouter();
 
   const [fullName, setFullName] = useState(profile?.fullName ?? "");
   const [phone, setPhone] = useState(profile?.phone ?? "");
@@ -30,7 +33,16 @@ export default function ProfileEditPage() {
   const [academicStatus, setAcademicStatus] = useState<AcademicStatus>(profile?.academicStatus ?? "Graduated");
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    if (profile && profile.role !== "applicant") {
+      router.replace("/dashboard");
+    }
+  }, [profile, router]);
+
   if (!profile) return null;
+  if (profile.role !== "applicant") return null;
+
+  const profileLocked = profile.currentStatus !== "Draft";
 
   const occupationLabels: Record<Occupation, string> = {
     Nurse: t.onboarding.nurse,
@@ -41,6 +53,10 @@ export default function ProfileEditPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (profileLocked) {
+      toast.error("Profile editing is locked while your application is under review.");
+      return;
+    }
     if (!fullName.trim()) return;
     setSubmitting(true);
     try {
@@ -67,6 +83,12 @@ export default function ProfileEditPage() {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {profileLocked && (
+          <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-700 dark:text-yellow-300">
+            Profile fields are locked while your dossier is in review. They will reopen if corrections are requested.
+          </div>
+        )}
+
         {/* Personal Info Card */}
         <Card>
           <CardContent className="p-6 sm:p-8 space-y-5">
@@ -82,6 +104,7 @@ export default function ProfileEditPage() {
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 className="h-12 text-base"
+                disabled={profileLocked}
               />
             </div>
 
@@ -97,6 +120,7 @@ export default function ProfileEditPage() {
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder={t.onboarding.phonePlaceholder}
                 className="h-12 text-base"
+                disabled={profileLocked}
               />
             </div>
           </CardContent>
@@ -118,6 +142,7 @@ export default function ProfileEditPage() {
                     key={o.value}
                     type="button"
                     onClick={() => setOccupation(o.value)}
+                    disabled={profileLocked}
                     className={`border rounded-xl p-5 text-center transition-all cursor-pointer ${
                       isActive
                         ? "border-primary bg-primary/10 ring-2 ring-primary/30 shadow-sm"
@@ -140,6 +165,7 @@ export default function ProfileEditPage() {
                   onChange={(e) => setCustomOccupation(e.target.value)}
                   placeholder={t.onboarding.otherPlaceholder}
                   className="h-12 text-base"
+                  disabled={profileLocked}
                 />
               </div>
             )}
@@ -174,6 +200,7 @@ export default function ProfileEditPage() {
                     checked={academicStatus === s.value}
                     onChange={() => setAcademicStatus(s.value)}
                     className="mr-4 w-4 h-4 accent-[var(--primary)]"
+                    disabled={profileLocked}
                   />
                   <span className={`text-base font-medium ${academicStatus === s.value ? "text-primary" : "text-foreground"}`}>
                     {s.label}
@@ -184,7 +211,7 @@ export default function ProfileEditPage() {
           </CardContent>
         </Card>
 
-        <Button type="submit" disabled={submitting} className="w-full gradient-primary text-white border-0 h-12 text-base font-semibold">
+        <Button type="submit" disabled={submitting || profileLocked} className="w-full gradient-primary text-white border-0 h-12 text-base font-semibold">
           {submitting ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
           {submitting ? t.profileEdit.saving : t.profileEdit.save}
         </Button>

@@ -206,7 +206,14 @@ const de: Translations = {
     reject: "Ablehnen",
     rejectReason: "Grund der Ablehnung:",
     readyForPartner: "Bereit für Partner",
+    precheckPassed: "Vorprüfung bestanden",
     markSubmitted: "Als eingereicht markieren",
+    approveApplication: "Bewerbung freigeben",
+    rejectApplication: "Bewerbung ablehnen",
+    rejectApplicationReasonPlaceholder: "Fügen Sie einen klaren Ablehnungsgrund hinzu",
+    downloadFolderZip: "ZIP-Ordner herunterladen",
+    preparingZip: "ZIP wird vorbereitet...",
+    missingFile: "Fehlt",
   },
 
   // Admin page
@@ -325,6 +332,10 @@ const de: Translations = {
       createInvoice: "Rechnung erstellt",
       markPaid: "Rechnung als bezahlt markiert",
       profileUpdate: "Profil aktualisiert",
+      correctionRequested: "Korrekturen angefordert",
+      approveApplication: "Bewerbung genehmigt",
+      rejectApplication: "Bewerbung abgelehnt",
+      submitDossier: "Dossier zur Prüfung eingereicht",
     },
   },
 };

@@ -6,6 +6,8 @@ export type ProfileStatus =
   | "Reviewing"
   | "Ready_for_Partner"
   | "Submitted_to_Partner"
+  | "Approved"
+  | "Rejected"
   | "Invoiced"
   | "Paid"
   | "Hired";

@@ -6,6 +6,8 @@ const STATUS_STYLES: Record<string, string> = {
   Reviewing: "bg-yellow-500/15 text-yellow-600 border-transparent",
   Ready_for_Partner: "bg-primary/15 text-primary border-transparent",
   Submitted_to_Partner: "bg-purple-500/15 text-purple-600 border-transparent",
+  Approved: "bg-emerald-500/15 text-emerald-600 border-transparent",
+  Rejected: "bg-red-500/15 text-red-500 border-transparent",
   Invoiced: "bg-orange-500/15 text-orange-600 border-transparent",
   Paid: "bg-green-500/15 text-green-600 border-transparent",
   Hired: "bg-emerald-500/15 text-emerald-600 border-transparent",

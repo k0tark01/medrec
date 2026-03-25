@@ -36,7 +36,7 @@ export default function Sidebar() {
 
   const links = [
     { href: "/dashboard", label: t.sidebar.dashboard, icon: LayoutDashboard, roles: ["applicant", "reviewer", "admin"] },
-    { href: "/dashboard/profile", label: t.profileEdit.editProfile, icon: UserPen, roles: ["applicant", "reviewer", "admin"] },
+    { href: "/dashboard/profile", label: t.profileEdit.editProfile, icon: UserPen, roles: ["applicant"] },
     { href: "/dashboard/documents", label: t.sidebar.documents, icon: FileText, roles: ["applicant"] },
     { href: "/dashboard/billing", label: t.sidebar.billing, icon: CreditCard, roles: ["applicant", "admin"] },
     { href: "/dashboard/review", label: t.sidebar.reviewQueue, icon: ClipboardList, roles: ["reviewer", "admin"] },
@@ -45,7 +45,7 @@ export default function Sidebar() {
   ].filter((l) => l.roles.includes(role));
 
   const nav = (
-    <nav className="flex flex-col h-full">
+    <nav className="flex h-full min-h-0 flex-col overflow-hidden lg:sticky lg:top-0 lg:h-screen">
       <div className="p-6 border-b border-border">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg gradient-primary flex items-center justify-center">
@@ -57,7 +57,7 @@ export default function Sidebar() {
           </div>
         </div>
       </div>
-      <div className="flex-1 py-4 space-y-1 px-3">
+      <div className="flex-1 min-h-0 py-4 space-y-1 px-3 overflow-y-auto">
         {links.map((l) => {
           const active = pathname === l.href;
           return (
@@ -77,7 +77,7 @@ export default function Sidebar() {
           );
         })}
       </div>
-      <div className="p-4 border-t border-border">
+      <div className="mt-auto p-4 border-t border-border">
         <div className="flex items-center justify-between mb-3">
           <div className="min-w-0">
             <div className="text-sm font-medium text-foreground truncate">{profile?.fullName}</div>
@@ -125,7 +125,7 @@ export default function Sidebar() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-40 w-64 bg-card border-r border-border transform transition-transform lg:translate-x-0 ${
+        className={`fixed lg:static inset-y-0 left-0 z-40 w-64 h-screen lg:h-auto bg-card border-r border-border transform transition-transform lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >

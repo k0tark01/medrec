@@ -204,7 +204,14 @@ const en = {
     reject: "Reject",
     rejectReason: "Reason for rejection:",
     readyForPartner: "Ready for Partner",
+    precheckPassed: "Pre-check Passed",
     markSubmitted: "Mark Submitted",
+    approveApplication: "Approve Application",
+    rejectApplication: "Reject Application",
+    rejectApplicationReasonPlaceholder: "Add a clear reason for rejection",
+    downloadFolderZip: "Download Folder ZIP",
+    preparingZip: "Preparing ZIP...",
+    missingFile: "Missing",
   },
 
   // Admin page
@@ -323,6 +330,10 @@ const en = {
       createInvoice: "Created invoice",
       markPaid: "Marked invoice paid",
       profileUpdate: "Updated profile",
+      correctionRequested: "Requested corrections",
+      approveApplication: "Approved application",
+      rejectApplication: "Rejected application",
+      submitDossier: "Submitted dossier for review",
     },
   },
 } as const;

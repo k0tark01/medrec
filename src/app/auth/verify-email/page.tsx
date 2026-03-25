@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "@/lib/language-context";
@@ -15,6 +15,12 @@ export default function VerifyEmailWaitingPage() {
   const { t } = useTranslation();
   const [resending, setResending] = useState(false);
   const [checking, setChecking] = useState(false);
+
+  useEffect(() => {
+    if (emailVerified) {
+      router.push("/dashboard");
+    }
+  }, [emailVerified, router]);
 
   async function handleResend() {
     setResending(true);
@@ -51,11 +57,7 @@ export default function VerifyEmailWaitingPage() {
     router.push("/auth");
   }
 
-  // If already verified, redirect
-  if (emailVerified) {
-    router.push("/dashboard");
-    return null;
-  }
+  if (emailVerified) return null;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">

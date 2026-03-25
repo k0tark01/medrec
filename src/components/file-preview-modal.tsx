@@ -17,7 +17,7 @@ export function FilePreviewModal({ open, onClose, url, title }: FilePreviewModal
   const { t } = useTranslation();
   const [fullscreen, setFullscreen] = useState(false);
 
-  const isImage = /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(url) || url.includes("/preview?");
+  const isImage = /\.(jpg|jpeg|png|gif|webp|svg|bmp)$/i.test(url);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) { onClose(); setFullscreen(false); } }}>
