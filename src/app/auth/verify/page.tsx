@@ -3,16 +3,19 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useTranslation } from "@/lib/language-context";
+import { useAuth } from "@/lib/auth-context";
 import { Globe, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { account } from "@/lib/appwrite";
+import { getAuthErrorMessage } from "@/lib/auth-errors";
 import Link from "next/link";
 
 function VerifyEmailContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { t } = useTranslation();
+  const { refreshUser } = useAuth();
   const userId = searchParams.get("userId");
   const secret = searchParams.get("secret");
   const invalidLink = !userId || !secret;
@@ -28,16 +31,17 @@ function VerifyEmailContent() {
     async function verify() {
       try {
         await account.updateVerification(uid, sec);
+        await refreshUser();
         setStatus("success");
-        setTimeout(() => router.push("/dashboard"), 3000);
-      } catch {
+        setTimeout(() => router.replace("/dashboard"), 1200);
+      } catch (err: unknown) {
         setStatus("error");
-        setErrorMsg("Verification failed. The link may have expired.");
+        setErrorMsg(getAuthErrorMessage(err, t));
       }
     }
 
     verify();
-  }, [invalidLink, userId, secret, router]);
+  }, [invalidLink, userId, secret, router, refreshUser, t]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-6">

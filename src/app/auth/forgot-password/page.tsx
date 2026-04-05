@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Globe, Sun, Moon, Loader2, ArrowLeft, Mail } from "lucide-react";
 import Link from "next/link";
+import { getAuthErrorMessage } from "@/lib/auth-errors";
 import { toast } from "sonner";
 
 export default function ForgotPasswordPage() {
@@ -29,8 +30,7 @@ export default function ForgotPasswordPage() {
       setSent(true);
       toast.success(t.passwordReset.sent);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : t.auth.somethingWrong;
-      toast.error(message);
+      toast.error(getAuthErrorMessage(err, t));
     } finally {
       setSubmitting(false);
     }

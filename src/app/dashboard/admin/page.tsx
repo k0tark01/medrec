@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { account, databases, DATABASE_ID, COLLECTIONS } from "@/lib/appwrite";
 import { StatusBadge } from "@/components/status-badge";
 import type { Profile, BillingRecord } from "@/lib/types";
-import { Users, CreditCard, Plus, BarChart3 } from "lucide-react";
+import { Users, CreditCard, Plus, BarChart3, UserPlus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +32,29 @@ export default function AdminPage() {
   const [invoiceAmount, setInvoiceAmount] = useState("");
   const [invoiceType, setInvoiceType] = useState<"Deposit" | "Success_Fee" | "Other">("Deposit");
   const [invoiceDesc, setInvoiceDesc] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<"reviewer" | "admin">("reviewer");
+  const [sendingInvite, setSendingInvite] = useState(false);
+  const [staffProfileIds, setStaffProfileIds] = useState<string[]>([]);
+
+  async function loadUserProfiles() {
+    const [applicantsRes, staffRes] = await Promise.all([
+      databases.listDocuments(DATABASE_ID, COLLECTIONS.PROFILES),
+      databases.listDocuments(DATABASE_ID, COLLECTIONS.STAFF_PROFILES),
+    ]);
+
+    const applicants = applicantsRes.documents as unknown as Profile[];
+    const staffDocs = staffRes.documents as Array<Record<string, unknown>>;
+    const staffProfiles: Profile[] = staffDocs.map((doc) => ({
+      ...(doc as unknown as Profile),
+      occupation: "Other",
+      academicStatus: "Graduated",
+      currentStatus: "Draft",
+    } as Profile));
+
+    setProfiles([...applicants, ...staffProfiles]);
+    setStaffProfileIds(staffProfiles.map((p) => p.$id));
+  }
 
   async function mutateWorkflow(payload: Record<string, unknown>) {
     const jwt = await account.createJWT();
@@ -50,15 +73,14 @@ export default function AdminPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [pRes, bRes, aRes] = await Promise.all([
-          databases.listDocuments(DATABASE_ID, COLLECTIONS.PROFILES),
+        const [bRes, aRes] = await Promise.all([
           databases.listDocuments(DATABASE_ID, COLLECTIONS.BILLING),
           databases.listDocuments(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, [
             Query.orderDesc("$createdAt"),
             Query.limit(50),
           ]),
         ]);
-        setProfiles(pRes.documents as unknown as Profile[]);
+        await loadUserProfiles();
         setInvoices(bRes.documents as unknown as BillingRecord[]);
         setAuditLogs(aRes.documents as unknown as AuditLog[]);
       } catch {
@@ -92,8 +114,7 @@ export default function AdminPage() {
       });
       const bRes = await databases.listDocuments(DATABASE_ID, COLLECTIONS.BILLING);
       setInvoices(bRes.documents as unknown as BillingRecord[]);
-      const pRes = await databases.listDocuments(DATABASE_ID, COLLECTIONS.PROFILES);
-      setProfiles(pRes.documents as unknown as Profile[]);
+      await loadUserProfiles();
       setShowInvoiceForm(false);
       setInvoiceAmount("");
       setInvoiceDesc("");
@@ -115,11 +136,76 @@ export default function AdminPage() {
   }
 
   async function updateRole(p: Profile, role: "applicant" | "reviewer" | "admin") {
-    await databases.updateDocument(DATABASE_ID, COLLECTIONS.PROFILES, p.$id, { role });
+    if (staffProfileIds.includes(p.$id)) {
+      if (role === "applicant") {
+        toast.error("Staff accounts cannot be switched to applicant from this panel.");
+        return;
+      }
+      await databases.updateDocument(DATABASE_ID, COLLECTIONS.STAFF_PROFILES, p.$id, { role });
+    } else {
+      if (role === "applicant") {
+        await databases.updateDocument(DATABASE_ID, COLLECTIONS.PROFILES, p.$id, { role });
+      } else {
+        await databases.createDocument(DATABASE_ID, COLLECTIONS.STAFF_PROFILES, "unique()", {
+          userId: p.userId,
+          fullName: p.fullName,
+          email: p.email,
+          phone: p.phone || undefined,
+          role,
+        });
+
+        await databases.deleteDocument(DATABASE_ID, COLLECTIONS.PROFILES, p.$id);
+        await loadUserProfiles();
+
+        await logAuditEvent({
+          userId: profile!.$id,
+          action: "roleChange",
+          targetId: p.$id,
+          targetType: "profile",
+          details: `${p.fullName}: ${p.role} → ${role} (migrated to staff_profiles)`,
+        });
+        return;
+      }
+    }
     await logAuditEvent({ userId: profile!.$id, action: "roleChange", targetId: p.$id, targetType: "profile", details: `${p.fullName}: ${p.role} → ${role}` });
     setProfiles((prev) =>
       prev.map((pr) => (pr.$id === p.$id ? { ...pr, role } : pr))
     );
+  }
+
+  async function sendStaffInvite() {
+    if (!inviteEmail.trim()) {
+      toast.error(t.staffInvite.emailRequired);
+      return;
+    }
+
+    setSendingInvite(true);
+    try {
+      const jwt = await account.createJWT();
+      const response = await fetch("/api/auth/staff-invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "send",
+          jwt: jwt.jwt,
+          email: inviteEmail.trim(),
+          role: inviteRole,
+        }),
+      });
+
+      const data = (await response.json().catch(() => ({}))) as { error?: string; resent?: boolean };
+
+      if (!response.ok) {
+        throw new Error(data.error || t.auth.somethingWrong);
+      }
+
+      setInviteEmail("");
+      toast.success(data.resent ? t.staffInvite.resent : t.staffInvite.sent);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t.auth.somethingWrong);
+    } finally {
+      setSendingInvite(false);
+    }
   }
 
   if (!profile || profile.role !== "admin") {
@@ -172,6 +258,46 @@ export default function AdminPage() {
       {/* User management */}
       <section>
         <h2 className="text-lg font-semibold text-foreground mb-3">{t.admin.userManagement}</h2>
+
+        <Card className="mb-3">
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <UserPlus className="w-4 h-4 text-primary" />
+              {t.staffInvite.adminCreateTitle}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="md:col-span-2 space-y-1.5">
+                <Label htmlFor="invite-email">{t.auth.email}</Label>
+                <Input
+                  id="invite-email"
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  placeholder="reviewer@example.com"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>{t.usersPage.role}</Label>
+                <Select value={inviteRole} onValueChange={(v) => setInviteRole(v as "reviewer" | "admin")}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="reviewer">{t.admin.reviewerRole}</SelectItem>
+                    <SelectItem value="admin">{t.admin.adminRole}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <Button onClick={sendStaffInvite} disabled={sendingInvite} className="gradient-primary text-white border-0">
+              {sendingInvite ? t.pleaseWait : t.staffInvite.sendBtn}
+            </Button>
+          </CardContent>
+        </Card>
+
         <div className="space-y-2">
           {profiles.map((p) => (
             <Card key={p.$id}>

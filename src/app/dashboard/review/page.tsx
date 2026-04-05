@@ -2,12 +2,12 @@
 
 import { useAuth } from "@/lib/auth-context";
 import { useEffect, useState, useCallback } from "react";
-import { account, databases, storage, DATABASE_ID, COLLECTIONS, BUCKET_ORIGINALS, BUCKET_TRANSLATIONS } from "@/lib/appwrite";
+import { account, databases, DATABASE_ID, COLLECTIONS, BUCKET_ORIGINALS, BUCKET_TRANSLATIONS } from "@/lib/appwrite";
 import { Query } from "appwrite";
 import { StatusBadge } from "@/components/status-badge";
 import { formatDocType } from "@/lib/doc-requirements";
 import type { Profile, DocRecord, ProfileStatus } from "@/lib/types";
-import { ChevronRight, Eye, Check, X, Download, ArrowLeft, Send, Search } from "lucide-react";
+import { ChevronRight, Eye, Check, X, Download, ArrowLeft, Send, Search, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -44,6 +44,7 @@ export default function ReviewPage() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [activeDocId, setActiveDocId] = useState<string | null>(null);
   const [downloadingFolder, setDownloadingFolder] = useState(false);
+  const [fileActionKey, setFileActionKey] = useState<string | null>(null);
 
   function openPreview(url: string, title: string) {
     setPreviewUrl(url);
@@ -242,12 +243,62 @@ export default function ReviewPage() {
     toast.error(t.review.rejectApplication);
   }
 
-  function getPreviewUrl(fileId: string, bucket: string) {
-    return storage.getFileView(bucket, fileId);
+  async function fetchFileBlob(fileId: string, bucketId: string, profileId: string, mode: "preview" | "download") {
+    const jwt = await account.createJWT();
+    const response = await fetch("/api/workflow/file", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jwt: jwt.jwt,
+        fileId,
+        bucketId,
+        profileId,
+        mode,
+      }),
+    });
+
+    if (!response.ok) {
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+      throw new Error(data.error || "Failed to access file");
+    }
+
+    return response.blob();
   }
 
-  function getDownloadUrl(fileId: string, bucket: string) {
-    return storage.getFileDownload(bucket, fileId);
+  async function openSecurePreview(fileId: string, bucketId: string, title: string) {
+    if (!selected) return;
+    const key = `${fileId}:preview`;
+    setFileActionKey(key);
+    try {
+      const blob = await fetchFileBlob(fileId, bucketId, selected.$id, "preview");
+      const objectUrl = URL.createObjectURL(blob);
+      openPreview(objectUrl, title);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to preview file");
+    } finally {
+      setFileActionKey(null);
+    }
+  }
+
+  async function downloadSecureFile(fileId: string, bucketId: string, fallbackName: string) {
+    if (!selected) return;
+    const key = `${fileId}:download`;
+    setFileActionKey(key);
+    try {
+      const blob = await fetchFileBlob(fileId, bucketId, selected.$id, "download");
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = fallbackName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to download file");
+    } finally {
+      setFileActionKey(null);
+    }
   }
 
   const filteredApplicants = applicants.filter((a) => {
@@ -465,17 +516,19 @@ export default function ReviewPage() {
                         {activeDoc.originalFileId ? (
                           <div className="flex items-center gap-3">
                             <button
-                              onClick={() => openPreview(getPreviewUrl(activeDoc.originalFileId!, BUCKET_ORIGINALS).toString(), `${formatDocType(activeDoc.docType)} — ${t.review.originalLabel}`)}
+                              onClick={() => openSecurePreview(activeDoc.originalFileId!, BUCKET_ORIGINALS, `${formatDocType(activeDoc.docType)} — ${t.review.originalLabel}`)}
+                              disabled={fileActionKey === `${activeDoc.originalFileId}:preview`}
                               className="text-primary text-sm hover:underline inline-flex items-center gap-1"
                             >
-                              <Eye className="w-4 h-4" /> {t.review.preview}
+                              {fileActionKey === `${activeDoc.originalFileId}:preview` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />} {t.review.preview}
                             </button>
-                            <a
-                              href={getDownloadUrl(activeDoc.originalFileId, BUCKET_ORIGINALS).toString()}
+                            <button
+                              onClick={() => downloadSecureFile(activeDoc.originalFileId!, BUCKET_ORIGINALS, `${formatDocType(activeDoc.docType)}_original`)}
+                              disabled={fileActionKey === `${activeDoc.originalFileId}:download`}
                               className="text-muted-foreground text-sm hover:underline inline-flex items-center gap-1"
                             >
-                              <Download className="w-4 h-4" /> {t.review.download}
-                            </a>
+                              {fileActionKey === `${activeDoc.originalFileId}:download` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} {t.review.download}
+                            </button>
                           </div>
                         ) : (
                           <p className="text-sm text-muted-foreground">{t.review.missingFile}</p>
@@ -487,17 +540,19 @@ export default function ReviewPage() {
                         {activeDoc.translatedFileId ? (
                           <div className="flex items-center gap-3">
                             <button
-                              onClick={() => openPreview(getPreviewUrl(activeDoc.translatedFileId!, BUCKET_TRANSLATIONS).toString(), `${formatDocType(activeDoc.docType)} — ${t.review.translationLabel}`)}
+                              onClick={() => openSecurePreview(activeDoc.translatedFileId!, BUCKET_TRANSLATIONS, `${formatDocType(activeDoc.docType)} — ${t.review.translationLabel}`)}
+                              disabled={fileActionKey === `${activeDoc.translatedFileId}:preview`}
                               className="text-primary text-sm hover:underline inline-flex items-center gap-1"
                             >
-                              <Eye className="w-4 h-4" /> {t.review.preview}
+                              {fileActionKey === `${activeDoc.translatedFileId}:preview` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />} {t.review.preview}
                             </button>
-                            <a
-                              href={getDownloadUrl(activeDoc.translatedFileId, BUCKET_TRANSLATIONS).toString()}
+                            <button
+                              onClick={() => downloadSecureFile(activeDoc.translatedFileId!, BUCKET_TRANSLATIONS, `${formatDocType(activeDoc.docType)}_translation`)}
+                              disabled={fileActionKey === `${activeDoc.translatedFileId}:download`}
                               className="text-muted-foreground text-sm hover:underline inline-flex items-center gap-1"
                             >
-                              <Download className="w-4 h-4" /> {t.review.download}
-                            </a>
+                              {fileActionKey === `${activeDoc.translatedFileId}:download` ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} {t.review.download}
+                            </button>
                           </div>
                         ) : (
                           <p className="text-sm text-muted-foreground">{t.review.missingFile}</p>

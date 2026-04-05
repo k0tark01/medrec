@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { account, databases, DATABASE_ID, COLLECTIONS } from "@/lib/appwrite";
 import { Query, type Models } from "appwrite";
-import type { Profile } from "@/lib/types";
+import type { Profile, StaffProfile } from "@/lib/types";
 
 interface AuthState {
   user: Models.User<Models.Preferences> | null;
@@ -29,14 +29,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
-      const res = await databases.listDocuments(DATABASE_ID, COLLECTIONS.PROFILES, [
-        Query.equal("userId", userId),
-      ]);
-      if (res.documents.length > 0) {
-        setProfile(res.documents[0] as unknown as Profile);
-      } else {
-        setProfile(null);
+      const jwt = await account.createJWT();
+      const response = await fetch("/api/auth/me-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jwt: jwt.jwt }),
+      });
+
+      if (response.ok) {
+        const data = (await response.json()) as { profile: Profile | null };
+        setProfile(data.profile ?? null);
+        return;
       }
+
+      // Fallback to direct lookup if endpoint fails for any reason.
+      const staffRes = await databases.listDocuments(DATABASE_ID, COLLECTIONS.STAFF_PROFILES, [
+        Query.equal("userId", userId),
+        Query.limit(1),
+      ]);
+
+      if (staffRes.documents.length > 0) {
+        const staff = staffRes.documents[0] as unknown as StaffProfile;
+        setProfile({
+          ...staff,
+          occupation: "Other",
+          academicStatus: "Graduated",
+          currentStatus: "Draft",
+        } as Profile);
+        return;
+      }
+
+      const applicantRes = await databases.listDocuments(DATABASE_ID, COLLECTIONS.PROFILES, [
+        Query.equal("userId", userId),
+        Query.limit(1),
+      ]);
+
+      setProfile(applicantRes.documents.length > 0 ? (applicantRes.documents[0] as unknown as Profile) : null);
     } catch {
       setProfile(null);
     }
@@ -50,10 +78,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const currentUser = await account.get();
       setUser(currentUser);
+      await fetchProfile(currentUser.$id);
     } catch {
       // session may have expired
+      setUser(null);
+      setProfile(null);
     }
-  }, []);
+  }, [fetchProfile]);
 
   useEffect(() => {
     async function init() {
@@ -72,15 +103,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [fetchProfile]);
 
   const login = async (email: string, password: string) => {
-    await account.createEmailPasswordSession(email, password);
+    const normalizedEmail = email.trim().toLowerCase();
+    await account.createEmailPasswordSession(normalizedEmail, password);
     const currentUser = await account.get();
     setUser(currentUser);
     await fetchProfile(currentUser.$id);
   };
 
   const register = async (email: string, password: string, name: string) => {
-    await account.create("unique()", email, password, name);
-    await account.createEmailPasswordSession(email, password);
+    const normalizedEmail = email.trim().toLowerCase();
+    await account.create("unique()", normalizedEmail, password, name);
+    await account.createEmailPasswordSession(normalizedEmail, password);
     const currentUser = await account.get();
     setUser(currentUser);
 

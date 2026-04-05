@@ -55,6 +55,7 @@ export default function DashboardPage() {
   const progressPercent = requiredDocs.length > 0 ? Math.round((verifiedCount / requiredDocs.length) * 100) : 0;
 
   const isApplicant = profile.role === "applicant";
+  const isStaff = profile.role === "reviewer" || profile.role === "admin";
 
   // Determine next step message
   const getNextStepMessage = () => {
@@ -95,8 +96,14 @@ export default function DashboardPage() {
                 {profile.fullName.split(" ")[0]} 👋
               </h1>
               <div className="flex items-center gap-3 mt-2">
-                <span className="text-sm text-white/70 capitalize">{profile.occupation} &bull; {profile.academicStatus}</span>
-                <StatusBadge status={profile.currentStatus} />
+                <span className="text-sm text-white/70 capitalize">
+                  {isApplicant
+                    ? `${profile.occupation} • ${profile.academicStatus}`
+                    : profile.role === "admin"
+                      ? t.admin.adminRole
+                      : t.admin.reviewerRole}
+                </span>
+                {isApplicant && <StatusBadge status={profile.currentStatus} />}
               </div>
             </div>
             {isApplicant && (
@@ -114,8 +121,29 @@ export default function DashboardPage() {
         <div className="absolute -top-8 -left-8 w-32 h-32 rounded-full bg-white/5" />
       </div>
 
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {isStaff && (
+          <Card>
+            <CardContent className="p-6 sm:p-8">
+              <h2 className="text-xl font-semibold text-foreground mb-2">{t.dashboard.staffWelcomeTitle}</h2>
+              <p className="text-sm text-muted-foreground mb-6">{t.dashboard.staffWelcomeDesc}</p>
+
+              <div className="flex flex-wrap gap-3">
+                <Link href={profile.role === "admin" ? "/dashboard/admin" : "/dashboard/review"}>
+                  <Button className="gradient-primary text-white border-0">
+                    {profile.role === "admin" ? t.admin.title : t.sidebar.reviewQueue}
+                  </Button>
+                </Link>
+
+                <Link href="/dashboard/users">
+                  <Button variant="outline">{t.sidebar.users}</Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {isApplicant && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
           icon={<FileText className="w-5 h-5" />}
           iconBg="bg-primary/10 text-primary"
@@ -145,6 +173,7 @@ export default function DashboardPage() {
           sub={unpaidInvoices.length > 0 ? `${unpaidInvoices.reduce((s, i) => s + i.amount, 0).toFixed(2)} TND` : t.dashboard.allClear}
         />
       </div>
+      )}
 
       {isApplicant && (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 sm:gap-6">

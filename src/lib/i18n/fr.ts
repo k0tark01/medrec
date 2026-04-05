@@ -91,8 +91,14 @@ const fr: Translations = {
     fullName: "Nom complet",
     email: "E-mail",
     password: "Mot de passe",
+    confirmPassword: "Confirmer le mot de passe",
+    showPassword: "Afficher le mot de passe",
+    hidePassword: "Masquer le mot de passe",
     nameRequired: "Le nom est requis",
     somethingWrong: "Une erreur s'est produite",
+    invalidCredentials: "E-mail ou mot de passe invalide.",
+    emailAlreadyExists: "Un compte existe deja avec cet e-mail.",
+    rateLimited: "Trop de tentatives. Veuillez patienter puis reessayer.",
     brandingTitle: "Combler le fossé entre votre talent et les opportunités allemandes",
     brandingDesc:
       "Téléversez vos documents, obtenez une vérification experte, et laissez-nous gérer les soumissions aux partenaires. Votre carrière en Allemagne est à quelques étapes.",
@@ -129,6 +135,7 @@ const fr: Translations = {
     continueBtn: "Continuer vers le tableau de bord",
     creatingProfile: "Création du profil...",
     selectError: "Veuillez sélectionner votre profession et votre statut académique.",
+    staffBlocked: "Les comptes staff ne peuvent pas utiliser l'onboarding candidat.",
     failedCreate: "Échec de la création du profil",
   },
 
@@ -166,6 +173,8 @@ const fr: Translations = {
     allUploaded: "Tous les documents téléversés ! En attente de vérification.",
     correctionNeeded: "Certains documents nécessitent des corrections. Veuillez vérifier.",
     allVerified: "Tous les documents vérifiés ! Vous êtes sur la bonne voie.",
+    staffWelcomeTitle: "Espace equipe pret",
+    staffWelcomeDesc: "Utilisez ici les outils de revue et de gestion des utilisateurs. L'onboarding candidat est ignore pour les comptes staff.",
   },
 
   // Documents page
@@ -241,6 +250,22 @@ const fr: Translations = {
     applicantRole: "Candidat",
     reviewerRole: "Réviseur",
     adminRole: "Admin",
+  },
+
+  // Staff invite
+  staffInvite: {
+    adminCreateTitle: "Creer une invitation staff",
+    title: "Activez votre compte staff",
+    desc: "Definissez votre mot de passe et votre nom pour continuer.",
+    sendBtn: "Envoyer l'invitation",
+    completeBtn: "Finaliser le compte",
+    emailRequired: "L'e-mail est requis",
+    sent: "E-mail d'invitation envoye.",
+    resent: "E-mail d'invitation renvoye.",
+    success: "Configuration du compte terminee.",
+    completeFailed: "Impossible de terminer la configuration du compte. Demandez une nouvelle invitation.",
+    signInAfterSetup: "Le compte est pret. Connectez-vous avec votre nouveau mot de passe.",
+    invalidLink: "Lien d'invitation invalide ou expire.",
   },
 
   // Users page
@@ -336,6 +361,9 @@ const fr: Translations = {
       approveApplication: "Candidature approuvée",
       rejectApplication: "Candidature rejetée",
       submitDossier: "Dossier soumis pour vérification",
+      staffInviteCreated: "Invitation staff creee",
+      staffInviteResent: "Invitation staff renvoyee",
+      staffInviteAccepted: "Invitation staff acceptee",
     },
   },
 };

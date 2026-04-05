@@ -7,6 +7,7 @@ import { useTranslation } from "@/lib/language-context";
 import { Globe, Mail, CheckCircle, RefreshCw, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { getAuthErrorMessage } from "@/lib/auth-errors";
 import { toast } from "sonner";
 
 export default function VerifyEmailWaitingPage() {
@@ -28,7 +29,7 @@ export default function VerifyEmailWaitingPage() {
       await sendVerificationEmail();
       toast.success(t.emailVerification.resent);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to resend");
+      toast.error(getAuthErrorMessage(err, t));
     } finally {
       setResending(false);
     }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Account, Client, ID, Query } from "node-appwrite";
 import { serverDatabases } from "@/lib/appwrite-server";
 import { COLLECTIONS, DATABASE_ID } from "@/lib/appwrite";
-import type { BillingRecord, Profile, ProfileStatus, Role } from "@/lib/types";
+import type { BillingRecord, Profile, ProfileStatus, Role, StaffProfile } from "@/lib/types";
 import { canTransitionProfileStatus, getTransitionError, REVIEW_REJECTION_CODES } from "@/lib/review-workflow";
 
 type WorkflowAction =
@@ -27,19 +27,38 @@ async function getActorContext(jwt: string): Promise<ActorContext> {
   const account = new Account(client);
   const user = await account.get();
 
+  const staffRes = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.STAFF_PROFILES, [
+    Query.equal("userId", user.$id),
+    Query.limit(1),
+  ]);
+
+  if (staffRes.documents.length > 0) {
+    const staff = staffRes.documents[0] as unknown as StaffProfile;
+    return {
+      userId: user.$id,
+      profile: {
+        ...staff,
+        occupation: "Other",
+        academicStatus: "Graduated",
+        currentStatus: "Draft",
+      } as Profile,
+    };
+  }
+
   const profilesRes = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROFILES, [
     Query.equal("userId", user.$id),
     Query.limit(1),
   ]);
 
-  if (profilesRes.documents.length === 0) {
-    throw new Error("Profile not found for current user");
+  if (profilesRes.documents.length > 0) {
+    return {
+      userId: user.$id,
+      profile: profilesRes.documents[0] as unknown as Profile,
+    };
   }
 
-  return {
-    userId: user.$id,
-    profile: profilesRes.documents[0] as unknown as Profile,
-  };
+  throw new Error("Profile not found for current user");
+
 }
 
 function ensureRole(actorRole: Role, allowed: Role[]) {

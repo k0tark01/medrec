@@ -29,6 +29,17 @@ export interface Profile {
   role: Role;
 }
 
+export interface StaffProfile {
+  $id: string;
+  $createdAt: string;
+  $updatedAt: string;
+  userId: string;
+  fullName: string;
+  email: string;
+  phone?: string;
+  role: Exclude<Role, "applicant">;
+}
+
 export interface DocRecord {
   $id: string;
   $createdAt: string;

@@ -33,6 +33,7 @@ async function main() {
   // 2. Create collections
   const collections = [
     { id: "profiles", name: "Profiles" },
+    { id: "staff_profiles", name: "StaffProfiles" },
     { id: "documents", name: "Documents" },
     { id: "billing", name: "Billing" },
     { id: "audit_logs", name: "AuditLogs" },
@@ -95,6 +96,13 @@ async function main() {
   await enumAttr("profiles", "academicStatus", ["Graduated", "Student", "Ausbildung"], true);
   await enumAttr("profiles", "currentStatus", ["Draft", "Reviewing", "Ready_for_Partner", "Submitted_to_Partner", "Invoiced", "Paid", "Hired"], false, "Draft");
   await enumAttr("profiles", "role", ["applicant", "reviewer", "admin"], false, "applicant");
+
+  console.log("\n--- StaffProfiles attributes ---");
+  await str("staff_profiles", "userId", 255, true);
+  await str("staff_profiles", "fullName", 255, true);
+  await str("staff_profiles", "email", 255, true);
+  await str("staff_profiles", "phone", 50, false);
+  await enumAttr("staff_profiles", "role", ["reviewer", "admin"], true);
 
   console.log("\n--- Documents attributes ---");
   await str("documents", "profileId", 255, true);

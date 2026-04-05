@@ -91,8 +91,14 @@ const de: Translations = {
     fullName: "Vollständiger Name",
     email: "E-Mail",
     password: "Passwort",
+    confirmPassword: "Passwort bestaetigen",
+    showPassword: "Passwort anzeigen",
+    hidePassword: "Passwort ausblenden",
     nameRequired: "Name ist erforderlich",
     somethingWrong: "Etwas ist schiefgelaufen",
+    invalidCredentials: "Ungueltige E-Mail oder Passwort.",
+    emailAlreadyExists: "Ein Konto mit dieser E-Mail existiert bereits.",
+    rateLimited: "Zu viele Versuche. Bitte kurz warten und erneut versuchen.",
     brandingTitle: "Überbrücken Sie die Lücke zwischen Ihrem Talent und deutschen Möglichkeiten",
     brandingDesc:
       "Laden Sie Ihre Dokumente hoch, erhalten Sie eine Expertenverifizierung und lassen Sie uns die Partnereinreichungen übernehmen. Ihre Karriere in Deutschland ist nur wenige Schritte entfernt.",
@@ -129,6 +135,7 @@ const de: Translations = {
     continueBtn: "Weiter zum Dashboard",
     creatingProfile: "Profil wird erstellt...",
     selectError: "Bitte wählen Sie Ihren Beruf und akademischen Status.",
+    staffBlocked: "Staff-Konten dürfen das Bewerber-Onboarding nicht nutzen.",
     failedCreate: "Profil konnte nicht erstellt werden",
   },
 
@@ -166,6 +173,8 @@ const de: Translations = {
     allUploaded: "Alle Dokumente hochgeladen! Warten auf Überprüfung.",
     correctionNeeded: "Einige Dokumente benötigen Korrekturen. Bitte überprüfen.",
     allVerified: "Alle Dokumente verifiziert! Sie sind auf dem richtigen Weg.",
+    staffWelcomeTitle: "Staff-Bereich ist bereit",
+    staffWelcomeDesc: "Nutzen Sie hier Review- und Benutzerverwaltungs-Tools. Das Bewerber-Onboarding wird fuer Staff-Konten uebersprungen.",
   },
 
   // Documents page
@@ -241,6 +250,22 @@ const de: Translations = {
     applicantRole: "Bewerber",
     reviewerRole: "Prüfer",
     adminRole: "Admin",
+  },
+
+  // Staff invite
+  staffInvite: {
+    adminCreateTitle: "Staff-Einladung erstellen",
+    title: "Staff-Konto aktivieren",
+    desc: "Legen Sie Ihr Passwort fest und vervollstaendigen Sie Ihren Namen.",
+    sendBtn: "Einladung senden",
+    completeBtn: "Konto abschliessen",
+    emailRequired: "E-Mail ist erforderlich",
+    sent: "Einladungs-E-Mail gesendet.",
+    resent: "Einladungs-E-Mail erneut gesendet.",
+    success: "Kontoeinrichtung abgeschlossen.",
+    completeFailed: "Kontoeinrichtung konnte nicht abgeschlossen werden. Bitte fordern Sie eine neue Einladung an.",
+    signInAfterSetup: "Das Konto ist bereit. Bitte melden Sie sich mit Ihrem neuen Passwort an.",
+    invalidLink: "Einladungslink ist ungueltig oder abgelaufen.",
   },
 
   // Users page
@@ -336,6 +361,9 @@ const de: Translations = {
       approveApplication: "Bewerbung genehmigt",
       rejectApplication: "Bewerbung abgelehnt",
       submitDossier: "Dossier zur Prüfung eingereicht",
+      staffInviteCreated: "Staff-Einladung erstellt",
+      staffInviteResent: "Staff-Einladung erneut gesendet",
+      staffInviteAccepted: "Staff-Einladung akzeptiert",
     },
   },
 };

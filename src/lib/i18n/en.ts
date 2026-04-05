@@ -89,8 +89,14 @@ const en = {
     fullName: "Full Name",
     email: "Email",
     password: "Password",
+    confirmPassword: "Confirm Password",
+    showPassword: "Show password",
+    hidePassword: "Hide password",
     nameRequired: "Name is required",
     somethingWrong: "Something went wrong",
+    invalidCredentials: "Invalid email or password.",
+    emailAlreadyExists: "An account already exists with this email.",
+    rateLimited: "Too many attempts. Please wait a moment and try again.",
     brandingTitle: "Bridge the gap between your talent and German opportunities",
     brandingDesc:
       "Upload your documents, get expert verification, and let us handle partner submissions. Your German career is just a few steps away.",
@@ -127,6 +133,7 @@ const en = {
     continueBtn: "Continue to Dashboard",
     creatingProfile: "Creating Profile...",
     selectError: "Please select your occupation and academic status.",
+    staffBlocked: "Staff accounts cannot use applicant onboarding.",
     failedCreate: "Failed to create profile",
   },
 
@@ -164,6 +171,8 @@ const en = {
     allUploaded: "All documents uploaded! Waiting for review.",
     correctionNeeded: "Some documents need corrections. Please review.",
     allVerified: "All documents verified! You're on track.",
+    staffWelcomeTitle: "Staff workspace is ready",
+    staffWelcomeDesc: "Use review and user-management tools from here. Applicant onboarding is skipped for staff accounts.",
   },
 
   // Documents page
@@ -239,6 +248,22 @@ const en = {
     applicantRole: "Applicant",
     reviewerRole: "Reviewer",
     adminRole: "Admin",
+  },
+
+  // Staff invite
+  staffInvite: {
+    adminCreateTitle: "Create staff invite",
+    title: "Activate your staff account",
+    desc: "Set your password and complete your name to continue.",
+    sendBtn: "Send invite",
+    completeBtn: "Complete account setup",
+    emailRequired: "Email is required",
+    sent: "Invitation email sent.",
+    resent: "Invitation email resent.",
+    success: "Account setup complete.",
+    completeFailed: "Could not complete account setup. Please request a new invitation.",
+    signInAfterSetup: "Account is ready. Please sign in with your new password.",
+    invalidLink: "Invite link is invalid or expired.",
   },
 
   // Users page
@@ -334,6 +359,9 @@ const en = {
       approveApplication: "Approved application",
       rejectApplication: "Rejected application",
       submitDossier: "Submitted dossier for review",
+      staffInviteCreated: "Created staff invite",
+      staffInviteResent: "Resent staff invite",
+      staffInviteAccepted: "Staff invite accepted",
     },
   },
 } as const;

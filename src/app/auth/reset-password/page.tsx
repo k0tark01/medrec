@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Globe, Sun, Moon, Loader2, ArrowLeft, CheckCircle } from "lucide-react";
 import Link from "next/link";
+import { getAuthErrorMessage } from "@/lib/auth-errors";
 import { toast } from "sonner";
 
 function ResetPasswordForm() {
@@ -53,7 +54,7 @@ function ResetPasswordForm() {
       const checkData = (await checkResponse.json().catch(() => ({}))) as { error?: string };
 
       if (!checkResponse.ok) {
-        throw new Error(checkData.error || t.auth.somethingWrong);
+        throw new Error(checkData.error || "check-recovery-failed");
       }
 
       await account.updateRecovery(userId, secret, password);
@@ -74,14 +75,13 @@ function ResetPasswordForm() {
       const markData = (await markResponse.json().catch(() => ({}))) as { error?: string };
 
       if (!markResponse.ok) {
-        throw new Error(markData.error || t.auth.somethingWrong);
+        throw new Error(markData.error || "mark-recovery-failed");
       }
 
       setSuccess(true);
       toast.success(t.passwordReset.success);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : t.auth.somethingWrong;
-      toast.error(message);
+      toast.error(getAuthErrorMessage(err, t));
     } finally {
       setSubmitting(false);
     }

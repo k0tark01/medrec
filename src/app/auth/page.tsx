@@ -11,15 +11,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Globe, Sun, Moon, ArrowRight, Loader2 } from "lucide-react";
+import { Globe, Sun, Moon, ArrowRight, Loader2, Eye, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { loginSchema, registerSchema } from "@/lib/validations";
+import { getAuthErrorMessage } from "@/lib/auth-errors";
 import { toast } from "sonner";
 
 export default function AuthPage() {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -45,7 +49,7 @@ export default function AuthPage() {
         // Login will set user state; dashboard layout handles email verification check
         router.push("/dashboard");
       } else {
-        const result = registerSchema.safeParse({ name, email, password });
+        const result = registerSchema.safeParse({ name, email, password, confirmPassword });
         if (!result.success) {
           setError(result.error.issues[0].message);
           setSubmitting(false);
@@ -56,8 +60,7 @@ export default function AuthPage() {
         router.push("/auth/verify-email");
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : t.auth.somethingWrong;
-      setError(message);
+      setError(getAuthErrorMessage(err, t));
     } finally {
       setSubmitting(false);
     }
@@ -159,15 +162,26 @@ export default function AuthPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">{t.auth.password}</Label>
-              <Input
-                id="password"
-                type="password"
-                required
-                minLength={8}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={t.auth.minChars}
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  minLength={8}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={t.auth.minChars}
+                  className="pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                  aria-label={showPassword ? t.auth.hidePassword : t.auth.showPassword}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
               {mode === "login" && (
                 <div className="text-right">
                   <Link href="/auth/forgot-password" className="text-xs text-primary hover:underline">
@@ -176,6 +190,32 @@ export default function AuthPage() {
                 </div>
               )}
             </div>
+
+            {mode === "register" && (
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">{t.auth.confirmPassword}</Label>
+                <div className="relative">
+                  <Input
+                    id="confirmPassword"
+                    type={showConfirmPassword ? "text" : "password"}
+                    required
+                    minLength={8}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    placeholder={t.auth.minChars}
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((prev) => !prev)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
+                    aria-label={showConfirmPassword ? t.auth.hidePassword : t.auth.showPassword}
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            )}
             <Button type="submit" disabled={submitting} className="w-full gradient-primary text-white border-0 h-11">
               {submitting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               {submitting ? t.pleaseWait : mode === "login" ? t.signIn : t.auth.createAccountBtn}

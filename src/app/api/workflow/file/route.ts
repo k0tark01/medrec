@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import JSZip from "jszip";
 import { Account, Client, Query } from "node-appwrite";
-import { serverDatabases, serverStorage } from "@/lib/appwrite-server";
 import { BUCKET_ORIGINALS, BUCKET_TRANSLATIONS, COLLECTIONS, DATABASE_ID } from "@/lib/appwrite";
+import { serverDatabases, serverStorage } from "@/lib/appwrite-server";
 import type { DocRecord, Profile, Role, StaffProfile } from "@/lib/types";
+
+type AccessMode = "preview" | "download";
 
 async function getActorProfile(jwt: string): Promise<Profile> {
   const client = new Client()
@@ -47,29 +48,28 @@ function ensureRole(role: Role, allowed: Role[]) {
   }
 }
 
-function safeName(value: string) {
-  return value.replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, "_").slice(0, 80);
-}
-
-async function addFileToZip(zip: JSZip, folderName: string, bucketId: string, fileId: string, fallbackName: string) {
-  const meta = await serverStorage.getFile(bucketId, fileId);
-  const data = await serverStorage.getFileDownload(bucketId, fileId);
-  const bytes = Buffer.from(data);
-  const fileName = safeName(meta.name || fallbackName || fileId);
-  zip.file(`${folderName}/${fileName}`, bytes);
-}
-
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { jwt, profileId } = body as { jwt?: string; profileId?: string };
+    const body = (await req.json()) as {
+      jwt?: string;
+      fileId?: string;
+      profileId?: string;
+      bucketId?: string;
+      mode?: AccessMode;
+    };
 
-    if (!jwt || typeof jwt !== "string") {
-      return NextResponse.json({ error: "Missing jwt" }, { status: 400 });
+    const jwt = body.jwt;
+    const fileId = body.fileId;
+    const profileId = body.profileId;
+    const bucketId = body.bucketId;
+    const mode: AccessMode = body.mode === "download" ? "download" : "preview";
+
+    if (!jwt || !fileId || !profileId || !bucketId) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    if (!profileId || typeof profileId !== "string") {
-      return NextResponse.json({ error: "Missing profileId" }, { status: 400 });
+    if (bucketId !== BUCKET_ORIGINALS && bucketId !== BUCKET_TRANSLATIONS) {
+      return NextResponse.json({ error: "Invalid bucket" }, { status: 400 });
     }
 
     const actor = await getActorProfile(jwt);
@@ -91,40 +91,31 @@ export async function POST(req: NextRequest) {
     ]);
 
     const docs = docsRes.documents as unknown as DocRecord[];
-    if (docs.length === 0) {
-      return NextResponse.json({ error: "No documents found for this application" }, { status: 404 });
+    const fileBelongsToProfile = docs.some(
+      (doc) => doc.originalFileId === fileId || doc.translatedFileId === fileId
+    );
+
+    if (!fileBelongsToProfile) {
+      return NextResponse.json({ error: "File does not belong to applicant" }, { status: 403 });
     }
 
-    const zip = new JSZip();
+    const meta = await serverStorage.getFile(bucketId, fileId);
+    const bytes = await serverStorage.getFileDownload(bucketId, fileId);
+    const data = new Uint8Array(Buffer.from(bytes));
 
-    for (const doc of docs) {
-      const folderName = safeName(doc.docType || "Document");
+    const headers = new Headers();
+    headers.set("Content-Type", meta.mimeType || "application/octet-stream");
+    headers.set(
+      "Content-Disposition",
+      mode === "download"
+        ? `attachment; filename="${meta.name || fileId}"`
+        : `inline; filename="${meta.name || fileId}"`
+    );
+    headers.set("Cache-Control", "no-store");
 
-      if (doc.originalFileId) {
-        await addFileToZip(zip, folderName, BUCKET_ORIGINALS, doc.originalFileId, `${folderName}_original`);
-      }
-
-      if (doc.translatedFileId) {
-        await addFileToZip(zip, folderName, BUCKET_TRANSLATIONS, doc.translatedFileId, `${folderName}_translation`);
-      }
-    }
-
-    const zipBuffer = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE", compressionOptions: { level: 6 } });
-    const zipBytes = new Uint8Array(zipBuffer);
-
-    const applicantName = safeName(targetProfile.fullName || profileId);
-    const fileName = `application_folder_${applicantName}.zip`;
-
-    return new NextResponse(zipBytes, {
-      status: 200,
-      headers: {
-        "Content-Type": "application/zip",
-        "Content-Disposition": `attachment; filename=\"${fileName}\"`,
-        "Cache-Control": "no-store",
-      },
-    });
+    return new NextResponse(data, { status: 200, headers });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to download application folder";
+    const message = error instanceof Error ? error.message : "Failed to access file";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

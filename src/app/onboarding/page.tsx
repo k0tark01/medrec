@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 import { databases, DATABASE_ID, COLLECTIONS } from "@/lib/appwrite";
+import { Query } from "appwrite";
 import type { Occupation, AcademicStatus } from "@/lib/types";
 import { useTranslation } from "@/lib/language-context";
 import { Briefcase, GraduationCap, ArrowRight, Stethoscope, HeartPulse, Cog, CircleEllipsis, Globe, Loader2 } from "lucide-react";
@@ -23,7 +24,7 @@ const OCCUPATION_ICONS: Record<Occupation, LucideIcon> = {
 };
 
 export default function OnboardingPage() {
-  const { user, refreshProfile } = useAuth();
+  const { user, profile, refreshProfile, loading } = useAuth();
   const router = useRouter();
   const { t } = useTranslation();
   const [occupation, setOccupation] = useState<Occupation | "">("");  const [customOccupation, setCustomOccupation] = useState("");  const [academicStatus, setAcademicStatus] = useState<AcademicStatus | "">("");
@@ -31,9 +32,73 @@ export default function OnboardingPage() {
   const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [checkingStaff, setCheckingStaff] = useState(true);
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user) {
+      router.replace("/auth");
+      return;
+    }
+    if (profile) {
+      router.replace("/dashboard");
+      return;
+    }
+
+    let canceled = false;
+
+    async function guardStaffOnboarding() {
+      try {
+        const staffRes = await databases.listDocuments(DATABASE_ID, COLLECTIONS.STAFF_PROFILES, [
+          Query.equal("userId", user.$id),
+          Query.limit(1),
+        ]);
+
+        if (!canceled && staffRes.documents.length > 0) {
+          router.replace("/dashboard");
+          return;
+        }
+      } catch {
+        // no-op
+      } finally {
+        if (!canceled) setCheckingStaff(false);
+      }
+    }
+
+    void guardStaffOnboarding();
+
+    return () => {
+      canceled = true;
+    };
+  }, [loading, user, profile, router]);
+
+  if (loading || checkingStaff) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    if (profile) {
+      router.replace("/dashboard");
+      return;
+    }
+
+    const staffRes = await databases.listDocuments(DATABASE_ID, COLLECTIONS.STAFF_PROFILES, [
+      Query.equal("userId", user!.$id),
+      Query.limit(1),
+    ]);
+
+    if (staffRes.documents.length > 0) {
+      toast.error(t.onboarding.staffBlocked);
+      router.replace("/dashboard");
+      return;
+    }
+
     const result = onboardingSchema.safeParse({ fullName, phone: phone || undefined, occupation: occupation || undefined, academicStatus: academicStatus || undefined });
     if (!result.success) {
       setError(result.error.issues[0].message);
